@@ -64,8 +64,9 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Public GitHub webhook receiver — must be registered before the auth middleware
-app.post('/api/webhooks/receive/:id', handleWebhookReceive);
+// Public GitHub webhook receiver — uses express.raw() to preserve the original
+// request body bytes for HMAC-SHA256 signature verification
+app.post('/api/webhooks/receive/:id', express.raw({ type: 'application/json' }), handleWebhookReceive);
 
 // Protected routes
 app.use('/api', authMiddleware);

@@ -78,10 +78,11 @@ export default function LoginPage() {
             )}
             {!legacyMode && (
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Username</label>
+                <label htmlFor="login-username" className="block text-sm text-gray-400 mb-1">Username</label>
                 <div className="relative">
                   <User size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
                   <input
+                    id="login-username"
                     type="text"
                     value={username}
                     onChange={e => setUsername(e.target.value)}

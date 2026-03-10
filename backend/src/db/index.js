@@ -124,7 +124,7 @@ function runMigrations() {
 
 export function hashPassword(password) {
   const salt = randomBytes(16).toString('hex');
-  const hash = scryptSync(password, salt, 64).toString('hex');
+  const hash = scryptSync(password, salt, 64, { N: 16384, r: 8, p: 1 }).toString('hex');
   return `${salt}:${hash}`;
 }
 
@@ -133,7 +133,10 @@ export function verifyPassword(password, stored) {
     const [salt, hash] = stored.split(':');
     if (!salt || !hash) return false;
     const hashBuf = Buffer.from(hash, 'hex');
-    const candidateBuf = scryptSync(password, salt, 64);
+    // Support both legacy (no cost params) and new hashes — keylen 64 in both cases
+    const candidateBuf = hashBuf.length === 64
+      ? scryptSync(password, salt, 64, { N: 16384, r: 8, p: 1 })
+      : scryptSync(password, salt, hashBuf.length);
     return timingSafeEqual(hashBuf, candidateBuf);
   } catch {
     return false;

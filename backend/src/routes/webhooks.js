@@ -98,10 +98,10 @@ router.delete('/:id', (req, res) => {
   }
 });
 
-/**
- * Public GitHub webhook receiver — mounted separately before the auth middleware.
- * Path: POST /api/webhooks/receive/:id
- */
+// Public GitHub webhook receiver — mounted separately before the auth middleware.
+// Path: POST /api/webhooks/receive/:id
+// Uses express.raw() middleware (registered in index.js) to preserve the raw body
+// bytes needed for HMAC-SHA256 signature verification.
 export async function handleWebhookReceive(req, res) {
   try {
     const db = getDb();
@@ -110,13 +110,21 @@ export async function handleWebhookReceive(req, res) {
       return res.status(404).json({ error: 'Webhook not found or disabled' });
     }
 
+    // req.body is a Buffer when express.raw() middleware is applied
+    const rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.from(JSON.stringify(req.body));
+    let parsedBody = {};
+    try {
+      parsedBody = JSON.parse(rawBody.toString('utf8'));
+    } catch {
+      // Non-JSON body is fine — just use empty object for flow context
+    }
+
     // Verify HMAC-SHA256 signature when a secret is configured
     if (config.secret) {
       const signature = req.headers['x-hub-signature-256'];
       if (!signature) {
         return res.status(401).json({ error: 'Missing X-Hub-Signature-256 header' });
       }
-      const rawBody = JSON.stringify(req.body);
       const expected = 'sha256=' + createHmac('sha256', config.secret).update(rawBody).digest('hex');
       // Constant-time compare
       if (signature.length !== expected.length || !safeEqual(signature, expected)) {

@@ -461,7 +461,7 @@ export default function SettingsPage() {
               <div key={user.id} className="flex items-center justify-between p-3 bg-[#0d0d0f] border border-[#2a2d35] rounded-xl group">
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-xs font-bold text-white">
-                    {user.username[0].toUpperCase()}
+                    {(user.username || '?')[0].toUpperCase()}
                   </div>
                   <div>
                     <div className="text-sm font-medium text-white flex items-center gap-2">
@@ -537,7 +537,7 @@ export default function SettingsPage() {
           </button>
         </div>
         <p className="text-xs text-gray-500 mb-4">
-          Point GitHub repository webhooks to <code className="font-mono text-gray-400 bg-[#0d0d0f] px-1.5 py-0.5 rounded">/api/webhooks/receive/:id</code> to trigger flow runs on GitHub events.
+          Point GitHub repository webhooks to <code className="font-mono text-gray-400 bg-[#0d0d0f] px-1.5 py-0.5 rounded">/api/webhooks/receive/&lt;id&gt;</code> where <code className="font-mono text-gray-400 bg-[#0d0d0f] px-1.5 py-0.5 rounded">&lt;id&gt;</code> is the webhook config ID shown below.
         </p>
 
         {!settings?.webhooks?.length ? (

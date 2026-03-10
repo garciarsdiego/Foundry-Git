@@ -23,7 +23,8 @@ router.post('/login', (req, res) => {
   // If username is provided, try user-based authentication first
   if (username) {
     const db = getDb();
-    const user = db.prepare('SELECT * FROM users WHERE username = ? AND is_active = 1').get(username);
+    // Case-insensitive username lookup to prevent account confusion attacks
+    const user = db.prepare('SELECT * FROM users WHERE lower(username) = lower(?) AND is_active = 1').get(username);
     if (user && verifyPassword(password, user.password_hash)) {
       const token = jwt.sign(
         { id: user.id, username: user.username, role: user.role },
@@ -86,7 +87,7 @@ router.post('/users', (req, res) => {
     const validRoles = ['admin', 'member', 'viewer'];
     const userRole = validRoles.includes(role) ? role : 'member';
 
-    const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
+    const existing = db.prepare('SELECT id FROM users WHERE lower(username) = lower(?)').get(username);
     if (existing) {
       return res.status(409).json({ error: 'Username already exists' });
     }
