@@ -21,6 +21,7 @@ import FlowBuilderPage from './pages/FlowBuilderPage.jsx';
 import FlowDetailPage from './pages/FlowDetailPage.jsx';
 import SkillsPage from './pages/SkillsPage.jsx';
 import McpPage from './pages/McpPage.jsx';
+import CompaniesPage from './pages/CompaniesPage.jsx';
 import LoginPage from './pages/LoginPage.jsx';
 import NotFoundPage from './pages/NotFoundPage.jsx';
 
@@ -49,6 +50,7 @@ export default function App() {
             <Route path="flows/:id" element={<FlowDetailPage />} />
             <Route path="skills" element={<SkillsPage />} />
             <Route path="mcp" element={<McpPage />} />
+            <Route path="companies" element={<CompaniesPage />} />
             <Route path="*" element={<NotFoundPage />} />
           </Route>
         </Routes>

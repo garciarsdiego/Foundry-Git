@@ -23,6 +23,8 @@ import chatRouter from './routes/chat.js';
 import skillsRouter from './routes/skills.js';
 import mcpRouter from './routes/mcp.js';
 import authRouter from './routes/auth.js';
+import webhooksRouter, { handleWebhookReceive } from './routes/webhooks.js';
+import companiesRouter from './routes/companies.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -63,6 +65,10 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Public GitHub webhook receiver — uses express.raw() to preserve the original
+// request body bytes for HMAC-SHA256 signature verification
+app.post('/api/webhooks/receive/:id', express.raw({ type: 'application/json' }), handleWebhookReceive);
+
 // Protected routes
 app.use('/api', authMiddleware);
 
@@ -83,6 +89,8 @@ app.use('/api/flows', flowsRouter);
 app.use('/api/chat', chatRouter);
 app.use('/api/skills', skillsRouter);
 app.use('/api/mcp', mcpRouter);
+app.use('/api/webhooks', webhooksRouter);
+app.use('/api/companies', companiesRouter);
 
 app.use((err, req, res, next) => {
   console.error(err.stack);

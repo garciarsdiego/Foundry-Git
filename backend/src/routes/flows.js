@@ -65,14 +65,15 @@ router.put('/:id', (req, res) => {
     const db = getDb();
     const existing = db.prepare('SELECT * FROM flows WHERE id = ?').get(req.params.id);
     if (!existing) return res.status(404).json({ error: 'Flow not found' });
-    const { name, description, status, project_id } = req.body;
+    const { name, description, status, project_id, canvas_layout_json } = req.body;
     db.prepare(`
-      UPDATE flows SET name = ?, description = ?, status = ?, project_id = ?, updated_at = datetime('now') WHERE id = ?
+      UPDATE flows SET name = ?, description = ?, status = ?, project_id = ?, canvas_layout_json = ?, updated_at = datetime('now') WHERE id = ?
     `).run(
       name ?? existing.name,
       description ?? existing.description,
       status ?? existing.status,
       project_id !== undefined ? project_id : existing.project_id,
+      canvas_layout_json !== undefined ? (canvas_layout_json ? JSON.stringify(canvas_layout_json) : null) : existing.canvas_layout_json,
       req.params.id
     );
     const flow = db.prepare('SELECT * FROM flows WHERE id = ?').get(req.params.id);

@@ -1,6 +1,15 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { MessageSquare, Send, Bot, Plus, ChevronDown, Loader, Clock, X } from 'lucide-react';
+import {
+  MessageSquare, Send, Bot, Plus, ChevronDown, Loader, Clock, X,
+  Settings, Zap, Brain, GitBranch, ChevronRight, SlidersHorizontal
+} from 'lucide-react';
 import api from '../components/api.js';
+
+const REASONING_LEVELS = [
+  { value: 'normal', label: 'Normal', description: 'Standard response' },
+  { value: 'extended', label: 'Extended', description: 'Step-by-step reasoning' },
+  { value: 'max', label: 'Max', description: 'Deep reasoning + explanations' },
+];
 
 function MessageBubble({ msg }) {
   return (
@@ -38,10 +47,112 @@ function MessageBubble({ msg }) {
   );
 }
 
+function ChatSettingsPanel({ providers, chatOptions, onChange, onClose }) {
+  return (
+    <div className="w-72 flex-shrink-0 bg-[#16181c] border-l border-[#2a2d35] flex flex-col overflow-y-auto">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-[#2a2d35]">
+        <span className="text-sm font-medium text-white flex items-center gap-2"><SlidersHorizontal size={14} className="text-blue-400" /> Chat Options</span>
+        <button onClick={onClose} className="text-gray-500 hover:text-white"><X size={14} /></button>
+      </div>
+      <div className="flex-1 p-4 space-y-5">
+
+        {/* Provider override */}
+        <div>
+          <label className="block text-xs font-medium text-gray-400 mb-2 uppercase tracking-wider">Provider</label>
+          <select
+            value={chatOptions.provider_config_id || ''}
+            onChange={e => onChange({ provider_config_id: e.target.value || null })}
+            className="w-full bg-[#0d0d0f] border border-[#2a2d35] rounded-lg px-2 py-2 text-white text-sm focus:outline-none focus:border-blue-500"
+          >
+            <option value="">Auto (use agent's provider)</option>
+            {providers.map(p => (
+              <option key={p.id} value={p.id}>{p.name} ({p.provider_type})</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Model override */}
+        <div>
+          <label className="block text-xs font-medium text-gray-400 mb-2 uppercase tracking-wider">Model Override</label>
+          <input
+            value={chatOptions.model || ''}
+            onChange={e => onChange({ model: e.target.value || null })}
+            placeholder="e.g., gpt-4o, claude-3-5-sonnet"
+            className="w-full bg-[#0d0d0f] border border-[#2a2d35] rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 placeholder-gray-600"
+          />
+          <p className="text-xs text-gray-600 mt-1">Leave empty to use provider's default model</p>
+        </div>
+
+        {/* Reasoning level */}
+        <div>
+          <label className="block text-xs font-medium text-gray-400 mb-2 uppercase tracking-wider">Reasoning Level</label>
+          <div className="space-y-1.5">
+            {REASONING_LEVELS.map(level => (
+              <button
+                key={level.value}
+                onClick={() => onChange({ reasoning_level: level.value })}
+                className={`w-full text-left px-3 py-2.5 rounded-lg border transition-colors ${
+                  chatOptions.reasoning_level === level.value
+                    ? 'bg-blue-600/20 border-blue-500/40 text-blue-300'
+                    : 'bg-[#0d0d0f] border-[#2a2d35] text-gray-300 hover:border-[#3a3d45]'
+                }`}
+              >
+                <div className="text-sm font-medium">{level.label}</div>
+                <div className="text-xs text-gray-500">{level.description}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Plan mode */}
+        <div>
+          <label className="block text-xs font-medium text-gray-400 mb-2 uppercase tracking-wider">Plan Mode</label>
+          <button
+            role="switch"
+            aria-checked={chatOptions.plan_mode}
+            onClick={() => onChange({ plan_mode: !chatOptions.plan_mode })}
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onChange({ plan_mode: !chatOptions.plan_mode }); } }}
+            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg border transition-colors ${
+              chatOptions.plan_mode
+                ? 'bg-green-600/20 border-green-500/40 text-green-300'
+                : 'bg-[#0d0d0f] border-[#2a2d35] text-gray-400 hover:border-[#3a3d45]'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <GitBranch size={14} />
+              <div className="text-left">
+                <div className="text-sm font-medium">Plan before acting</div>
+                <div className="text-xs text-gray-500">Agent creates a plan first</div>
+              </div>
+            </div>
+            <div aria-hidden="true" className={`w-8 h-4 rounded-full transition-colors ${chatOptions.plan_mode ? 'bg-green-500' : 'bg-gray-700'}`}>
+              <div className={`w-3 h-3 bg-white rounded-full mt-0.5 transition-transform ${chatOptions.plan_mode ? 'translate-x-4' : 'translate-x-0.5'}`} />
+            </div>
+          </button>
+        </div>
+
+        {/* Active options summary */}
+        {(chatOptions.provider_config_id || chatOptions.model || chatOptions.reasoning_level !== 'normal' || chatOptions.plan_mode) && (
+          <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-3">
+            <p className="text-xs font-medium text-blue-400 mb-1.5">Active overrides:</p>
+            <ul className="text-xs text-gray-400 space-y-1">
+              {chatOptions.provider_config_id && <li>• Provider overridden</li>}
+              {chatOptions.model && <li>• Model: {chatOptions.model}</li>}
+              {chatOptions.reasoning_level !== 'normal' && <li>• Reasoning: {chatOptions.reasoning_level}</li>}
+              {chatOptions.plan_mode && <li>• Plan mode enabled</li>}
+            </ul>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function ChatPage() {
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState([]);
   const [agents, setAgents] = useState([]);
+  const [providers, setProviders] = useState([]);
   const [sessions, setSessions] = useState([]);
   const [selectedAgent, setSelectedAgent] = useState(null);
   const [sessionId, setSessionId] = useState(() => {
@@ -56,12 +167,20 @@ export default function ChatPage() {
   const [workspace, setWorkspace] = useState(null);
   const [showAgentPicker, setShowAgentPicker] = useState(false);
   const [showSessions, setShowSessions] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [chatOptions, setChatOptions] = useState({
+    provider_config_id: null,
+    model: null,
+    reasoning_level: 'normal',
+    plan_mode: false,
+  });
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
 
   useEffect(() => {
     api.get('/workspaces').then(ws => { if (ws?.length) setWorkspace(ws[0]); }).catch(() => {});
     api.get('/agents').then(setAgents).catch(() => {});
+    api.get('/providers').then(setProviders).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -96,6 +215,11 @@ export default function ChatPage() {
       const response = await api.post('/chat', {
         workspace_id: workspace.id, agent_id: selectedAgent?.id || null,
         message: userMessage, session_id: sessionId,
+        // Advanced options
+        provider_config_id: chatOptions.provider_config_id || undefined,
+        model: chatOptions.model || undefined,
+        reasoning_level: chatOptions.reasoning_level !== 'normal' ? chatOptions.reasoning_level : undefined,
+        plan_mode: chatOptions.plan_mode || undefined,
       });
       setMessages(prev => [...prev, {
         role: 'assistant', content: response.content,
@@ -123,6 +247,8 @@ export default function ChatPage() {
     setSessionId(sid);
     setShowSessions(false);
   }
+
+  const hasActiveOptions = chatOptions.provider_config_id || chatOptions.model || chatOptions.reasoning_level !== 'normal' || chatOptions.plan_mode;
 
   return (
     <div className="flex h-full max-h-full overflow-hidden">
@@ -165,11 +291,22 @@ export default function ChatPage() {
                 <MessageSquare size={14} className="text-blue-400" />
               </div>
               <div>
-                <h1 className="font-semibold text-white text-sm">Chat</h1>
+                <h1 className="font-semibold text-white text-sm">Agentic Chat</h1>
                 <p className="text-xs text-gray-500">{selectedAgent ? selectedAgent.name : 'No agent selected'}</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
+              {/* Chat settings toggle */}
+              <button
+                onClick={() => setShowSettings(!showSettings)}
+                title="Chat options"
+                className={`p-1.5 rounded-lg transition-colors relative ${showSettings ? 'text-blue-400 bg-blue-600/10' : 'text-gray-500 hover:text-white hover:bg-white/5'}`}
+              >
+                <SlidersHorizontal size={15} />
+                {hasActiveOptions && (
+                  <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 bg-blue-400 rounded-full" />
+                )}
+              </button>
               <div className="relative">
                 <button onClick={() => setShowAgentPicker(!showAgentPicker)}
                   className="flex items-center gap-2 px-3 py-1.5 bg-[#1e2128] border border-[#2a2d35] rounded-lg text-sm text-gray-300 hover:border-[#3a3d45] transition-colors">
@@ -178,8 +315,8 @@ export default function ChatPage() {
                   <ChevronDown size={11} className="text-gray-500" />
                 </button>
                 {showAgentPicker && (
-                  <div className="absolute right-0 top-full mt-1 w-60 bg-[#1e2128] border border-[#2a2d35] rounded-xl shadow-2xl z-20 overflow-hidden">
-                    <div className="p-1">
+                  <div className="absolute right-0 top-full mt-1 w-64 bg-[#1e2128] border border-[#2a2d35] rounded-xl shadow-2xl z-20 overflow-hidden">
+                    <div className="p-1 max-h-72 overflow-y-auto">
                       <button onClick={() => { setSelectedAgent(null); setShowAgentPicker(false); }}
                         className="w-full text-left px-3 py-2 text-sm text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors">
                         No agent (generic)
@@ -217,6 +354,12 @@ export default function ChatPage() {
               <p className="text-gray-500 text-sm max-w-xs leading-relaxed">
                 {selectedAgent ? `Chatting with ${selectedAgent.name}. Configure a provider for real AI.` : 'Select an agent above or just start typing.'}
               </p>
+              {hasActiveOptions && (
+                <div className="mt-3 flex items-center gap-1.5 text-xs text-blue-400 bg-blue-500/10 border border-blue-500/20 rounded-lg px-3 py-1.5">
+                  <SlidersHorizontal size={11} />
+                  Chat options active
+                </div>
+              )}
             </div>
           ) : messages.map(msg => <MessageBubble key={msg.id} msg={msg} />)}
 
@@ -255,6 +398,17 @@ export default function ChatPage() {
           </div>
         </div>
       </div>
+
+      {/* Chat settings side panel */}
+      {showSettings && (
+        <ChatSettingsPanel
+          providers={providers}
+          chatOptions={chatOptions}
+          onChange={updates => setChatOptions(prev => ({ ...prev, ...updates }))}
+          onClose={() => setShowSettings(false)}
+        />
+      )}
     </div>
   );
 }
+

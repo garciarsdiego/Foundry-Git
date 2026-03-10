@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { FolderKanban, Bot, Users, PlaySquare, ArrowRight, Loader, DollarSign, Coins, TrendingUp } from 'lucide-react';
+import { FolderKanban, Bot, Users, PlaySquare, ArrowRight, Loader, DollarSign, Coins, TrendingUp, BarChart2 } from 'lucide-react';
 import api from '../components/api.js';
 import StatusBadge from '../components/StatusBadge.jsx';
 
@@ -83,6 +83,133 @@ function CostSummary({ costs, loading }) {
     </div>
   );
 }
+
+/**
+ * Simple SVG bar chart component — no external library required.
+ * Renders a sparkline-style bar chart for daily cost/token data.
+ */
+function BarChart({ data, valueKey, label, color = '#3b82f6', formatValue }) {
+  if (!data || data.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-24 text-gray-600 text-xs">No data yet</div>
+    );
+  }
+
+  const maxVal = Math.max(...data.map(d => d[valueKey] || 0), 0.000001);
+  const barWidth = Math.max(4, Math.floor(280 / data.length) - 2);
+  const chartHeight = 64;
+
+  return (
+    <div>
+      <svg width="100%" viewBox={`0 0 ${data.length * (barWidth + 2)} ${chartHeight + 20}`} className="overflow-visible">
+        {data.map((d, i) => {
+          const val = d[valueKey] || 0;
+          const barH = Math.max(2, Math.round((val / maxVal) * chartHeight));
+          const x = i * (barWidth + 2);
+          const y = chartHeight - barH;
+          return (
+            <g key={i}>
+              <rect
+                x={x}
+                y={y}
+                width={barWidth}
+                height={barH}
+                rx={2}
+                fill={color}
+                opacity={0.8}
+              />
+              {data.length <= 14 && (
+                <text
+                  x={x + barWidth / 2}
+                  y={chartHeight + 14}
+                  textAnchor="middle"
+                  fontSize="8"
+                  fill="#6b7280"
+                >
+                  {d.date?.slice(5)}
+                </text>
+              )}
+            </g>
+          );
+        })}
+      </svg>
+      {maxVal > 0 && (
+        <div className="flex justify-between text-xs text-gray-600 mt-1">
+          <span>{data[0]?.date}</span>
+          <span className="text-gray-500">max: {formatValue ? formatValue(maxVal) : maxVal}</span>
+          <span>{data[data.length - 1]?.date}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AnalyticsCharts({ costs, loading }) {
+  const { byDay, totals } = costs || {};
+
+  return (
+    <div className="bg-[#16181c] border border-[#2a2d35] rounded-xl">
+      <div className="flex items-center gap-2 px-6 py-4 border-b border-[#2a2d35]">
+        <BarChart2 size={16} className="text-purple-400" />
+        <h2 className="font-semibold text-white">Analytics</h2>
+        <span className="text-xs text-gray-500 ml-auto">This month</span>
+      </div>
+      {loading ? (
+        <div className="flex items-center justify-center py-8 text-gray-500">
+          <Loader size={16} className="animate-spin mr-2" /> Loading...
+        </div>
+      ) : (
+        <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-6">
+          <div>
+            <div className="text-xs font-medium text-gray-400 mb-3 uppercase tracking-wider">Daily Cost (USD)</div>
+            <BarChart
+              data={byDay}
+              valueKey="cost_usd"
+              label="Cost"
+              color="#34d399"
+              formatValue={v => `$${v.toFixed(4)}`}
+            />
+          </div>
+          <div>
+            <div className="text-xs font-medium text-gray-400 mb-3 uppercase tracking-wider">Daily Token Usage</div>
+            <BarChart
+              data={byDay}
+              valueKey="total_tokens"
+              label="Tokens"
+              color="#818cf8"
+              formatValue={v => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v)}
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <div className="grid grid-cols-3 gap-3">
+              <div className="bg-black/20 rounded-lg p-3 text-center">
+                <div className="text-xs text-gray-500 mb-1">Runs</div>
+                <div className="text-lg font-bold text-white">{totals?.run_count || 0}</div>
+              </div>
+              <div className="bg-black/20 rounded-lg p-3 text-center">
+                <div className="text-xs text-gray-500 mb-1">Input Tokens</div>
+                <div className="text-lg font-bold text-blue-400">
+                  {(totals?.total_tokens_input || 0) >= 1000
+                    ? `${((totals?.total_tokens_input || 0) / 1000).toFixed(1)}k`
+                    : (totals?.total_tokens_input || 0)}
+                </div>
+              </div>
+              <div className="bg-black/20 rounded-lg p-3 text-center">
+                <div className="text-xs text-gray-500 mb-1">Output Tokens</div>
+                <div className="text-lg font-bold text-purple-400">
+                  {(totals?.total_tokens_output || 0) >= 1000
+                    ? `${((totals?.total_tokens_output || 0) / 1000).toFixed(1)}k`
+                    : (totals?.total_tokens_output || 0)}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 
 export default function DashboardPage() {
   const [stats, setStats] = useState({ projects: 0, runs: 0, agents: 0, teams: 0 });
@@ -193,6 +320,11 @@ export default function DashboardPage() {
 
         {/* Cost summary (1/3 width) */}
         <CostSummary costs={costs} loading={costsLoading} />
+      </div>
+
+      {/* Analytics charts */}
+      <div className="mb-6">
+        <AnalyticsCharts costs={costs} loading={costsLoading} />
       </div>
 
       {/* Quick links */}
