@@ -1,6 +1,22 @@
 import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import { getDb } from '../db/index.js';
+
+const execFileAsync = promisify(execFile);
+
+function getDefaultBinary(runtimeType) {
+  const defaults = {
+    'codex': 'codex',
+    'claude-code': 'claude',
+    'gemini-cli': 'gemini',
+    'kimi-code': 'kimi',
+    'kilo-code': 'kilo',
+    'opencode': 'opencode',
+  };
+  return defaults[runtimeType] || runtimeType;
+}
 
 const router = Router();
 
@@ -87,6 +103,34 @@ router.delete('/:id', (req, res) => {
     const db = getDb();
     db.prepare('DELETE FROM runtime_configs WHERE id = ?').run(req.params.id);
     res.status(204).send();
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/:id/check', async (req, res) => {
+  try {
+    const db = getDb();
+    const runtime = db.prepare('SELECT * FROM runtime_configs WHERE id = ?').get(req.params.id);
+    if (!runtime) return res.status(404).json({ error: 'Runtime config not found' });
+
+    const binary = runtime.binary_path || getDefaultBinary(runtime.runtime_type);
+
+    // Validate the binary value to prevent unexpected arguments to `which`/`where`.
+    // Allow absolute/relative paths and simple binary names (letters, digits, hyphens,
+    // underscores, dots, and forward/back slashes only).
+    if (!/^[a-zA-Z0-9._\-/\\]+$/.test(binary)) {
+      return res.status(400).json({ error: 'Invalid binary path' });
+    }
+
+    const whichCmd = process.platform === 'win32' ? 'where' : 'which';
+
+    try {
+      const { stdout } = await execFileAsync(whichCmd, [binary], { timeout: 5000 });
+      res.json({ available: true, path: stdout.trim().split(/\r?\n/)[0], binary });
+    } catch {
+      res.json({ available: false, path: null, binary });
+    }
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
