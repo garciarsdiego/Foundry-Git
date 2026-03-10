@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   Workflow, Plus, Trash2, ArrowLeft, Play, Loader, Bot,
-  GripVertical, ChevronRight, Save, Check, X, GitBranch, Zap
+  GripVertical, ChevronRight, Save, Check, X, GitBranch, Zap,
+  List, LayoutTemplate
 } from 'lucide-react';
 import api from '../components/api.js';
 import Modal from '../components/Modal.jsx';
@@ -229,6 +230,220 @@ function DraggableStepList({ steps, onReorder, onDelete }) {
   );
 }
 
+/**
+ * Visual node-based canvas editor for flow steps.
+ * - Each step is a draggable card node positioned on a scrollable canvas.
+ * - SVG edges connect nodes sequentially.
+ * - Node positions are saved in the flow's canvas_layout_json field.
+ */
+const NODE_W = 200;
+const NODE_H = 72;
+const GRID = 20;
+const CANVAS_W = 1600;
+const CANVAS_H = 900;
+
+const STEP_COLORS = {
+  agent: { bg: 'bg-blue-600/20', border: 'border-blue-500/40', icon: 'text-blue-400', header: '#1e3a5f' },
+  condition: { bg: 'bg-yellow-600/20', border: 'border-yellow-500/40', icon: 'text-yellow-400', header: '#3d3000' },
+  parallel: { bg: 'bg-purple-600/20', border: 'border-purple-500/40', icon: 'text-purple-400', header: '#2d1a5f' },
+};
+
+function snap(v) { return Math.round(v / GRID) * GRID; }
+
+function FlowCanvas({ steps, flowId, canvasLayout, onLayoutChange, onDelete, onAddStep }) {
+  // Node positions: { [stepId]: {x, y} }
+  const [positions, setPositions] = useState(() => {
+    const layout = canvasLayout || {};
+    // Auto-layout steps that don't have a saved position
+    return steps.reduce((acc, step, i) => {
+      acc[step.id] = layout[step.id] || { x: 80 + i * (NODE_W + 60), y: 200 };
+      return acc;
+    }, {});
+  });
+  const [selected, setSelected] = useState(null);
+  const [dragging, setDragging] = useState(null); // { id, offsetX, offsetY }
+  const svgRef = useRef(null);
+  const canvasRef = useRef(null);
+  const saveTimer = useRef(null);
+
+  // Re-initialize positions when steps change
+  useEffect(() => {
+    const layout = canvasLayout || {};
+    setPositions(steps.reduce((acc, step, i) => {
+      acc[step.id] = layout[step.id] || { x: 80 + i * (NODE_W + 60), y: 200 };
+      return acc;
+    }, {}));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [steps.map(s => s.id).join(',')]);
+
+  function getCanvasXY(e) {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return { x: 0, y: 0 };
+    return { x: e.clientX - rect.left + canvasRef.current.scrollLeft, y: e.clientY - rect.top + canvasRef.current.scrollTop };
+  }
+
+  function handleMouseDown(e, stepId) {
+    e.preventDefault();
+    const { x, y } = getCanvasXY(e);
+    const pos = positions[stepId] || { x: 0, y: 0 };
+    setDragging({ id: stepId, offsetX: x - pos.x, offsetY: y - pos.y });
+    setSelected(stepId);
+  }
+
+  const handleMouseMove = useCallback((e) => {
+    if (!dragging) return;
+    const { x, y } = getCanvasXY(e);
+    const nx = Math.max(0, Math.min(CANVAS_W - NODE_W, snap(x - dragging.offsetX)));
+    const ny = Math.max(0, Math.min(CANVAS_H - NODE_H, snap(y - dragging.offsetY)));
+    setPositions(prev => ({ ...prev, [dragging.id]: { x: nx, y: ny } }));
+  }, [dragging]);
+
+  const handleMouseUp = useCallback(() => {
+    if (!dragging) return;
+    setDragging(null);
+    // Debounce save layout to API
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      setPositions(prev => { onLayoutChange(prev); return prev; });
+    }, 600);
+  }, [dragging, onLayoutChange]);
+
+  useEffect(() => {
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [handleMouseMove, handleMouseUp]);
+
+  // Build SVG edges
+  const edges = steps.slice(0, -1).map((step, i) => {
+    const from = positions[step.id];
+    const to = positions[steps[i + 1].id];
+    if (!from || !to) return null;
+    const x1 = from.x + NODE_W / 2;
+    const y1 = from.y + NODE_H;
+    const x2 = to.x + NODE_W / 2;
+    const y2 = to.y;
+    const cy1 = y1 + Math.max(40, (y2 - y1) * 0.5);
+    const cy2 = y2 - Math.max(40, (y2 - y1) * 0.5);
+    return (
+      <g key={step.id + '-edge'}>
+        <path
+          d={`M ${x1} ${y1} C ${x1} ${cy1}, ${x2} ${cy2}, ${x2} ${y2}`}
+          fill="none"
+          stroke={step.step_type === 'condition' ? '#ca8a04' : step.step_type === 'parallel' ? '#7c3aed' : '#2563eb'}
+          strokeWidth="2"
+          strokeDasharray="6 3"
+          opacity="0.7"
+        />
+        <polygon
+          points={`${x2},${y2} ${x2 - 5},${y2 - 8} ${x2 + 5},${y2 - 8}`}
+          fill={step.step_type === 'condition' ? '#ca8a04' : step.step_type === 'parallel' ? '#7c3aed' : '#2563eb'}
+          opacity="0.7"
+        />
+      </g>
+    );
+  });
+
+  return (
+    <div className="relative overflow-hidden rounded-xl border border-[#2a2d35] bg-[#0d0d0f]" style={{ height: 500 }}>
+      {/* Canvas toolbar */}
+      <div className="absolute top-3 right-3 z-10 flex items-center gap-2">
+        <button
+          onClick={onAddStep}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-blue-400 bg-[#16181c] border border-blue-500/30 hover:border-blue-500/60 rounded-lg transition-colors shadow-lg"
+        >
+          <Plus size={13} /> Add Node
+        </button>
+      </div>
+
+      {steps.length === 0 && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-600">
+          <Workflow size={32} className="mb-3 opacity-40" />
+          <p className="text-sm mb-4">Canvas is empty</p>
+          <button onClick={onAddStep} className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm">Add First Node</button>
+        </div>
+      )}
+
+      {/* Scrollable canvas with dot grid */}
+      <div
+        ref={canvasRef}
+        className="overflow-auto w-full h-full select-none"
+        style={{
+          backgroundImage: 'radial-gradient(circle, #2a2d35 1px, transparent 1px)',
+          backgroundSize: `${GRID * 2}px ${GRID * 2}px`,
+        }}
+      >
+        <div style={{ width: CANVAS_W, height: CANVAS_H, position: 'relative' }}>
+          {/* SVG edges layer */}
+          <svg
+            ref={svgRef}
+            style={{ position: 'absolute', top: 0, left: 0, width: CANVAS_W, height: CANVAS_H, pointerEvents: 'none' }}
+          >
+            {edges}
+          </svg>
+
+          {/* Node cards */}
+          {steps.map((step, idx) => {
+            const pos = positions[step.id] || { x: 80 + idx * (NODE_W + 60), y: 200 };
+            const Icon = STEP_TYPE_ICONS[step.step_type] || Bot;
+            const colors = STEP_COLORS[step.step_type] || STEP_COLORS.agent;
+            const isSelected = selected === step.id;
+
+            return (
+              <div
+                key={step.id}
+                onMouseDown={e => handleMouseDown(e, step.id)}
+                style={{
+                  position: 'absolute',
+                  left: pos.x,
+                  top: pos.y,
+                  width: NODE_W,
+                  cursor: dragging?.id === step.id ? 'grabbing' : 'grab',
+                  zIndex: isSelected ? 10 : 1,
+                  userSelect: 'none',
+                }}
+                className={`rounded-xl border-2 shadow-lg transition-shadow ${colors.bg} ${isSelected ? 'border-blue-400 shadow-blue-500/20' : colors.border}`}
+              >
+                {/* Step index badge */}
+                <div className="absolute -top-2.5 -left-2.5 w-5 h-5 rounded-full bg-[#1e2128] border border-[#2a2d35] flex items-center justify-center text-xs text-gray-500 font-medium">
+                  {idx + 1}
+                </div>
+                {/* Delete button */}
+                <button
+                  onMouseDown={e => e.stopPropagation()}
+                  onClick={e => { e.stopPropagation(); onDelete(step.id); }}
+                  className="absolute -top-2.5 -right-2.5 w-5 h-5 rounded-full bg-[#1e2128] border border-[#2a2d35] flex items-center justify-center text-gray-500 hover:text-red-400 hover:border-red-400/40 transition-colors"
+                >
+                  <X size={10} />
+                </button>
+
+                <div className="p-3">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <Icon size={14} className={colors.icon} />
+                    <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">{STEP_TYPE_LABELS[step.step_type]}</span>
+                  </div>
+                  <p className="text-sm font-semibold text-white truncate">{step.name}</p>
+                  {step.agent_name && (
+                    <p className="text-xs text-gray-500 mt-0.5 truncate flex items-center gap-1">
+                      <Bot size={9} /> {step.agent_name}
+                    </p>
+                  )}
+                  {!step.agent_id && step.step_type !== 'condition' && (
+                    <p className="text-xs text-yellow-500/60 mt-0.5">No agent</p>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function FlowDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -244,6 +459,7 @@ export default function FlowDetailPage() {
   const [nameValue, setNameValue] = useState('');
   const [saving, setSaving] = useState(false);
   const [reordering, setReordering] = useState(false);
+  const [viewMode, setViewMode] = useState('list'); // 'list' | 'canvas'
 
   async function load() {
     try {
@@ -319,6 +535,14 @@ export default function FlowDetailPage() {
       load();
     } finally {
       setReordering(false);
+    }
+  }
+
+  async function handleCanvasLayoutChange(positions) {
+    try {
+      await api.put(`/flows/${id}`, { canvas_layout_json: positions });
+    } catch (err) {
+      console.error('Canvas layout save failed:', err);
     }
   }
 
@@ -405,16 +629,35 @@ export default function FlowDetailPage() {
               <h2 className="text-sm font-semibold text-gray-300 uppercase tracking-wider">Steps ({steps.length})</h2>
               {reordering && <Loader size={12} className="animate-spin text-blue-400" />}
             </div>
-            <button
-              onClick={() => setShowAddStep(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-blue-400 hover:text-blue-300 border border-blue-500/30 hover:border-blue-500/60 rounded-lg transition-colors"
-            >
-              <Plus size={14} />
-              Add Step
-            </button>
+            <div className="flex items-center gap-2">
+              {/* View mode toggle */}
+              <div className="flex items-center bg-[#16181c] border border-[#2a2d35] rounded-lg p-0.5">
+                <button
+                  onClick={() => setViewMode('list')}
+                  title="List view"
+                  className={`p-1.5 rounded transition-colors ${viewMode === 'list' ? 'bg-blue-600/30 text-blue-400' : 'text-gray-500 hover:text-gray-300'}`}
+                >
+                  <List size={13} />
+                </button>
+                <button
+                  onClick={() => setViewMode('canvas')}
+                  title="Canvas view"
+                  className={`p-1.5 rounded transition-colors ${viewMode === 'canvas' ? 'bg-blue-600/30 text-blue-400' : 'text-gray-500 hover:text-gray-300'}`}
+                >
+                  <LayoutTemplate size={13} />
+                </button>
+              </div>
+              <button
+                onClick={() => setShowAddStep(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-blue-400 hover:text-blue-300 border border-blue-500/30 hover:border-blue-500/60 rounded-lg transition-colors"
+              >
+                <Plus size={14} />
+                Add Step
+              </button>
+            </div>
           </div>
 
-          {steps.length === 0 ? (
+          {steps.length === 0 && viewMode === 'list' ? (
             <div className="bg-[#16181c] border-2 border-dashed border-[#2a2d35] rounded-xl p-8 text-center">
               <Workflow size={28} className="text-gray-600 mx-auto mb-3" />
               <p className="text-gray-500 text-sm mb-4">No steps yet. Add your first agent step.</p>
@@ -425,6 +668,15 @@ export default function FlowDetailPage() {
                 Add First Step
               </button>
             </div>
+          ) : viewMode === 'canvas' ? (
+            <FlowCanvas
+              steps={steps}
+              flowId={id}
+              canvasLayout={flow?.canvas_layout_json ? JSON.parse(flow.canvas_layout_json) : null}
+              onLayoutChange={handleCanvasLayoutChange}
+              onDelete={deleteStep}
+              onAddStep={() => setShowAddStep(true)}
+            />
           ) : (
             <>
               <p className="text-xs text-gray-600 mb-3 flex items-center gap-1.5">

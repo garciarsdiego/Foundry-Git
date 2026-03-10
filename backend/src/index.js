@@ -24,6 +24,7 @@ import skillsRouter from './routes/skills.js';
 import mcpRouter from './routes/mcp.js';
 import authRouter from './routes/auth.js';
 import webhooksRouter, { handleWebhookReceive } from './routes/webhooks.js';
+import companiesRouter from './routes/companies.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -89,6 +90,7 @@ app.use('/api/chat', chatRouter);
 app.use('/api/skills', skillsRouter);
 app.use('/api/mcp', mcpRouter);
 app.use('/api/webhooks', webhooksRouter);
+app.use('/api/companies', companiesRouter);
 
 app.use((err, req, res, next) => {
   console.error(err.stack);

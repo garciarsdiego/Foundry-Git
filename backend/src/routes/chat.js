@@ -40,7 +40,14 @@ router.get('/sessions', (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const db = getDb();
-    const { workspace_id, agent_id, message, session_id } = req.body;
+    const {
+      workspace_id, agent_id, message, session_id,
+      // Advanced chat options
+      provider_config_id: providerOverrideId,
+      model: modelOverride,
+      reasoning_level,  // 'normal' | 'extended' | 'max'
+      plan_mode,        // boolean — prepend a planning step
+    } = req.body;
 
     if (!workspace_id || !message) {
       return res.status(400).json({ error: 'workspace_id and message are required' });
@@ -65,10 +72,51 @@ router.post('/', async (req, res) => {
       }
     }
 
+    // Provider override: explicit provider_config_id wins over agent config
+    if (providerOverrideId) {
+      const override = db.prepare('SELECT * FROM provider_configs WHERE id = ?').get(providerOverrideId);
+      if (override) providerConfig = override;
+    }
+
+    // Load agent memories for context enrichment
+    let memoryContext = '';
+    if (agent_id) {
+      const memories = db.prepare(
+        'SELECT memory_key, content FROM agent_memories WHERE agent_id = ? ORDER BY importance DESC, updated_at DESC LIMIT 10'
+      ).all(agent_id);
+      if (memories.length > 0) {
+        memoryContext = '\n\n## Agent Memory\n' + memories.map(m => `- **${m.memory_key}**: ${m.content}`).join('\n');
+      }
+    }
+
     // Fetch recent conversation history (last 20 user/assistant messages)
     const history = db.prepare(
       "SELECT role, content FROM chat_messages WHERE session_id = ? AND role IN ('user', 'assistant') ORDER BY created_at ASC LIMIT 20"
     ).all(sessionId);
+
+    // Build effective system prompt with memory and reasoning guidance
+    let effectiveSystemPrompt = agent?.system_prompt || '';
+    if (memoryContext) effectiveSystemPrompt += memoryContext;
+
+    if (reasoning_level === 'extended' || reasoning_level === 'max') {
+      effectiveSystemPrompt += '\n\nThink step-by-step before answering. Show your reasoning process.';
+    }
+
+    // Plan mode: prepend the user message with a planning instruction
+    let effectiveMessage = message;
+    if (plan_mode) {
+      effectiveMessage = `Before answering, create a brief plan with numbered steps, then execute the plan.\n\n${message}`;
+    }
+
+    // Modify history to use effectiveMessage for the last user turn
+    const historyWithOverride = history.map((h, i) => (i === history.length - 1 && h.role === 'user')
+      ? { ...h, content: effectiveMessage }
+      : h
+    );
+    // If history didn't end with a user message (new session), the user message was just inserted
+    const chatHistory = historyWithOverride.length > 0 && historyWithOverride[historyWithOverride.length - 1].role === 'user'
+      ? historyWithOverride
+      : [...historyWithOverride, { role: 'user', content: effectiveMessage }];
 
     let assistantContent = null;
     let responseMetadata = {};
@@ -77,26 +125,29 @@ router.post('/', async (req, res) => {
       || providerConfig?.api_key
       || null;
 
-    if (apiKey && providerConfig?.provider_type === 'openai') {
-      const result = await callOpenAI(agent, providerConfig, history, apiKey);
+    // Apply model override
+    const modelConfig = modelOverride ? { ...providerConfig, model: modelOverride } : providerConfig;
+
+    if (apiKey && modelConfig?.provider_type === 'openai') {
+      const result = await callOpenAI({ ...agent, system_prompt: effectiveSystemPrompt || agent?.system_prompt }, modelConfig, chatHistory, apiKey);
       assistantContent = result.content;
       responseMetadata = { provider: 'openai', model: result.model, usage: result.usage };
-    } else if (apiKey && providerConfig?.provider_type === 'anthropic') {
-      const result = await callAnthropic(agent, providerConfig, history, apiKey);
+    } else if (apiKey && modelConfig?.provider_type === 'anthropic') {
+      const result = await callAnthropic({ ...agent, system_prompt: effectiveSystemPrompt || agent?.system_prompt }, modelConfig, chatHistory, apiKey);
       assistantContent = result.content;
       responseMetadata = { provider: 'anthropic', model: result.model, usage: result.usage };
-    } else if (apiKey && providerConfig?.provider_type === 'google') {
-      const result = await callGoogle(agent, providerConfig, history, apiKey);
+    } else if (apiKey && modelConfig?.provider_type === 'google') {
+      const result = await callGoogle({ ...agent, system_prompt: effectiveSystemPrompt || agent?.system_prompt }, modelConfig, chatHistory, apiKey);
       assistantContent = result.content;
       responseMetadata = { provider: 'google', model: result.model, usage: result.usage };
-    } else if (apiKey && providerConfig?.provider_type === 'openrouter') {
-      const result = await callOpenRouter(agent, providerConfig, history, apiKey);
+    } else if (apiKey && modelConfig?.provider_type === 'openrouter') {
+      const result = await callOpenRouter({ ...agent, system_prompt: effectiveSystemPrompt || agent?.system_prompt }, modelConfig, chatHistory, apiKey);
       assistantContent = result.content;
       responseMetadata = { provider: 'openrouter', model: result.model, usage: result.usage };
-    } else if (apiKey && ['groq', 'nvidia', 'kimi', 'minimax', 'glm'].includes(providerConfig?.provider_type)) {
-      const result = await callOpenAICompatible(agent, providerConfig, history, apiKey);
+    } else if (apiKey && ['groq', 'nvidia', 'kimi', 'minimax', 'glm'].includes(modelConfig?.provider_type)) {
+      const result = await callOpenAICompatible({ ...agent, system_prompt: effectiveSystemPrompt || agent?.system_prompt }, modelConfig, chatHistory, apiKey);
       assistantContent = result.content;
-      responseMetadata = { provider: providerConfig.provider_type, model: result.model, usage: result.usage };
+      responseMetadata = { provider: modelConfig.provider_type, model: result.model, usage: result.usage };
     } else {
       // Simulated response when no API key is configured
       assistantContent = generateSimulatedResponse(message, agent);

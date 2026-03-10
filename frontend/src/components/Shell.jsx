@@ -3,13 +3,14 @@ import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, FolderKanban, Bot, Users, Cpu, Cloud,
   PlaySquare, Settings, MessageSquare, Workflow, ChevronLeft,
-  ChevronRight, Zap, Server, LogOut
+  ChevronRight, Zap, Server, LogOut, Building2
 } from 'lucide-react';
 import { setToken } from './api.js';
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard', exact: true },
   { to: '/projects', icon: FolderKanban, label: 'Projects' },
+  { to: '/companies', icon: Building2, label: 'Companies' },
   { to: '/agents', icon: Bot, label: 'Agents' },
   { to: '/teams', icon: Users, label: 'Teams' },
   { to: '/runtimes', icon: Cpu, label: 'Runtimes' },

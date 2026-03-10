@@ -119,4 +119,75 @@ router.delete('/:id', (req, res) => {
   }
 });
 
+// --- Agent Memories ---
+
+// List memories for an agent
+router.get('/:id/memories', (req, res) => {
+  try {
+    const db = getDb();
+    const { session_id } = req.query;
+    let query = 'SELECT * FROM agent_memories WHERE agent_id = ?';
+    const params = [req.params.id];
+    if (session_id) { query += ' AND session_id = ?'; params.push(session_id); }
+    query += ' ORDER BY importance DESC, updated_at DESC';
+    res.json(db.prepare(query).all(...params));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Add memory
+router.post('/:id/memories', (req, res) => {
+  try {
+    const db = getDb();
+    const agent = db.prepare('SELECT * FROM agents WHERE id = ?').get(req.params.id);
+    if (!agent) return res.status(404).json({ error: 'Agent not found' });
+    const { memory_key, content, session_id, importance } = req.body;
+    if (!memory_key || !content) return res.status(400).json({ error: 'memory_key and content are required' });
+    const memId = uuidv4();
+    // Upsert by key+agent
+    const existing = db.prepare('SELECT id FROM agent_memories WHERE agent_id = ? AND memory_key = ?').get(req.params.id, memory_key);
+    if (existing) {
+      db.prepare(`UPDATE agent_memories SET content = ?, importance = ?, session_id = ?, updated_at = datetime('now') WHERE id = ?`).run(
+        content, importance ?? 1, session_id || null, existing.id
+      );
+      return res.json(db.prepare('SELECT * FROM agent_memories WHERE id = ?').get(existing.id));
+    }
+    db.prepare(`
+      INSERT INTO agent_memories (id, agent_id, workspace_id, memory_key, content, session_id, importance)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(memId, req.params.id, agent.workspace_id, memory_key, content, session_id || null, importance ?? 1);
+    res.status(201).json(db.prepare('SELECT * FROM agent_memories WHERE id = ?').get(memId));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Update memory
+router.put('/:id/memories/:memId', (req, res) => {
+  try {
+    const db = getDb();
+    const mem = db.prepare('SELECT * FROM agent_memories WHERE id = ? AND agent_id = ?').get(req.params.memId, req.params.id);
+    if (!mem) return res.status(404).json({ error: 'Memory not found' });
+    const { memory_key, content, importance } = req.body;
+    db.prepare(`UPDATE agent_memories SET memory_key = ?, content = ?, importance = ?, updated_at = datetime('now') WHERE id = ?`).run(
+      memory_key ?? mem.memory_key, content ?? mem.content, importance ?? mem.importance, req.params.memId
+    );
+    res.json(db.prepare('SELECT * FROM agent_memories WHERE id = ?').get(req.params.memId));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Delete memory
+router.delete('/:id/memories/:memId', (req, res) => {
+  try {
+    const db = getDb();
+    db.prepare('DELETE FROM agent_memories WHERE id = ? AND agent_id = ?').run(req.params.memId, req.params.id);
+    res.status(204).send();
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;

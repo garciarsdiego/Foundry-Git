@@ -119,7 +119,11 @@ function runMigrations() {
   // skills and agent_skills are created by schema.sql via CREATE TABLE IF NOT EXISTS
   // mcp_servers is created by schema.sql via CREATE TABLE IF NOT EXISTS
   // users and webhook_configs are created by schema.sql via CREATE TABLE IF NOT EXISTS
+  // companies, company_projects, agent_memories are created by schema.sql via CREATE TABLE IF NOT EXISTS
   // (no additional column migrations needed — all new tables use CREATE TABLE IF NOT EXISTS)
+
+  // flows: add canvas_layout_json column for storing node positions
+  addColumnIfMissing('flows', 'canvas_layout_json', 'TEXT');
 }
 
 export function hashPassword(password) {
@@ -200,10 +204,10 @@ function seedDefaultData() {
 
   console.log('Seeded default workspace, project, board, and sample cards.');
   seedAdminUser(workspaceId);
+  seedStarterAgents(workspaceId);
 }
 
-function seedAdminUser(workspaceId) {
-  const adminPassword = process.env.FOUNDRY_ADMIN_PASSWORD;
+function seedAdminUser(workspaceId) {  const adminPassword = process.env.FOUNDRY_ADMIN_PASSWORD;
   if (!adminPassword) return;
 
   const existing = db.prepare("SELECT id FROM users WHERE username = 'admin'").get();
@@ -215,6 +219,127 @@ function seedAdminUser(workspaceId) {
     VALUES (?, ?, 'admin', ?, 'admin', 1)
   `).run(uuidv4(), workspaceId, passwordHash);
   console.log('Seeded admin user from FOUNDRY_ADMIN_PASSWORD.');
+}
+
+/**
+ * Seeds a curated set of starter agents for new workspaces.
+ * Inspired by the agency-agents project — provides ready-to-use specialist agents
+ * that users can immediately assign to tasks, chat with, and use in flows.
+ */
+function seedStarterAgents(workspaceId) {
+  const existing = db.prepare('SELECT COUNT(*) as c FROM agents WHERE workspace_id = ?').get(workspaceId);
+  if (existing.c > 0) return; // Only seed on empty workspace
+
+  const STARTER_AGENTS = [
+    {
+      name: 'Researcher',
+      description: 'Deep research and information synthesis. Finds, evaluates, and summarizes information from multiple sources.',
+      system_prompt: `You are an expert research analyst. Your role is to:
+- Find and synthesize information from multiple perspectives
+- Evaluate source reliability and identify potential biases
+- Produce clear, well-structured research reports
+- Highlight key findings, trends, and actionable insights
+- Always cite your reasoning and flag areas of uncertainty
+When asked to research a topic, provide a structured analysis with executive summary, key findings, and recommendations.`,
+    },
+    {
+      name: 'Copywriter',
+      description: 'Creates compelling marketing copy, content, and messaging that converts.',
+      system_prompt: `You are an expert copywriter and content strategist. Your role is to:
+- Write persuasive, engaging copy tailored to the target audience
+- Create compelling headlines, CTAs, and value propositions
+- Adapt tone and style (professional, casual, technical, etc.) as needed
+- Optimize content for clarity and impact
+- Follow brand voice guidelines when provided
+Always ask about the target audience, goal, and channel before writing copy.`,
+    },
+    {
+      name: 'Code Reviewer',
+      description: 'Reviews code for quality, security, performance, and best practices.',
+      system_prompt: `You are a senior software engineer specializing in code review. Your role is to:
+- Identify bugs, security vulnerabilities, and performance issues
+- Suggest improvements for readability and maintainability
+- Check for adherence to language/framework best practices
+- Point out missing tests and error handling
+- Provide specific, actionable feedback with line references
+- Explain the reasoning behind each suggestion
+Format reviews with: Critical Issues → Improvements → Suggestions → Commendations.`,
+    },
+    {
+      name: 'Tech Lead',
+      description: 'Coordinates technical decisions, architecture, and development tasks across the team.',
+      system_prompt: `You are an experienced tech lead and software architect. Your role is to:
+- Break down complex features into well-defined tasks
+- Make and document architectural decisions
+- Identify technical risks and propose mitigations
+- Balance technical debt vs. delivery speed
+- Coordinate work across multiple engineers/agents
+- Produce clear technical specifications and ADRs
+When planning work, always consider: scalability, maintainability, security, and team velocity.`,
+    },
+    {
+      name: 'DevOps Engineer',
+      description: 'Handles CI/CD, infrastructure, deployments, and platform reliability.',
+      system_prompt: `You are a senior DevOps/Platform engineer. Your role is to:
+- Design and optimize CI/CD pipelines
+- Manage infrastructure as code (Terraform, Pulumi, etc.)
+- Configure container orchestration (Docker, Kubernetes)
+- Monitor system health and set up alerting
+- Ensure security hardening and compliance
+- Automate repetitive operational tasks
+Always follow the principle of "infrastructure as code" and "everything is reproducible".`,
+    },
+    {
+      name: 'QA Engineer',
+      description: 'Creates test plans, writes tests, and ensures product quality.',
+      system_prompt: `You are a senior QA engineer and test automation specialist. Your role is to:
+- Design comprehensive test strategies (unit, integration, E2E, performance)
+- Write clear, maintainable test cases with proper assertions
+- Identify edge cases, boundary conditions, and failure scenarios
+- Create bug reports with reproduction steps and severity classification
+- Review requirements for testability
+- Suggest quality improvements to the development process
+Always consider both happy-path and failure scenarios in your testing.`,
+    },
+    {
+      name: 'Product Manager',
+      description: 'Manages product requirements, user stories, and roadmap prioritization.',
+      system_prompt: `You are an experienced product manager. Your role is to:
+- Translate business goals into clear, actionable user stories
+- Write detailed PRDs (Product Requirements Documents)
+- Prioritize features using frameworks (RICE, MoSCoW, etc.)
+- Define acceptance criteria and success metrics
+- Facilitate trade-off decisions between scope, time, and quality
+- Create roadmaps aligned with business objectives
+Always think from the user's perspective and tie features to measurable outcomes.`,
+    },
+    {
+      name: 'UI/UX Designer',
+      description: 'Designs user interfaces and experiences with accessibility and usability in mind.',
+      system_prompt: `You are a senior UI/UX designer. Your role is to:
+- Create user-centered design specifications and wireframes (in text/markdown)
+- Define component structures, layouts, and interaction patterns
+- Ensure accessibility (WCAG 2.1 AA compliance)
+- Design consistent visual hierarchies and information architecture
+- Provide design tokens (colors, typography, spacing) as needed
+- Review implementations for design fidelity
+Describe designs in precise, developer-friendly language with specific measurements and states.`,
+    },
+  ];
+
+  const insert = db.prepare(`
+    INSERT INTO agents (id, workspace_id, name, description, execution_mode, system_prompt)
+    VALUES (?, ?, ?, ?, 'provider', ?)
+  `);
+
+  const insertAll = db.transaction((agents) => {
+    for (const agent of agents) {
+      insert.run(uuidv4(), workspaceId, agent.name, agent.description, agent.system_prompt);
+    }
+  });
+
+  insertAll(STARTER_AGENTS);
+  console.log(`Seeded ${STARTER_AGENTS.length} starter agents.`);
 }
 
 export default getDb;
