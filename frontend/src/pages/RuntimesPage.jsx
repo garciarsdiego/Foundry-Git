@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Cpu, Loader, Pencil, Trash2, ExternalLink, Terminal } from 'lucide-react';
+import { Plus, Cpu, Loader, Pencil, Trash2, ExternalLink, Terminal, CheckCircle, XCircle, RefreshCw } from 'lucide-react';
 import api from '../components/api.js';
 import Modal from '../components/Modal.jsx';
 import ConfirmModal from '../components/ConfirmModal.jsx';
@@ -154,12 +154,26 @@ export default function RuntimesPage() {
   const [editing, setEditing] = useState(null);
   const [workspaceId, setWorkspaceId] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [checkStatuses, setCheckStatuses] = useState({});
+
+  async function checkRuntime(id) {
+    setCheckStatuses(s => ({ ...s, [id]: { checking: true } }));
+    try {
+      const result = await api.get(`/runtimes/${id}/check`);
+      setCheckStatuses(s => ({ ...s, [id]: { checking: false, ...result } }));
+    } catch (err) {
+      console.error(`Failed to check runtime ${id}:`, err);
+      setCheckStatuses(s => ({ ...s, [id]: { checking: false, available: null, path: null } }));
+    }
+  }
 
   async function load() {
     try {
       const [ws, rtms] = await Promise.all([api.get('/workspaces'), api.get('/runtimes')]);
       setWorkspaceId(ws[0]?.id || '');
       setRuntimes(rtms);
+      // Auto-check every configured runtime
+      rtms.forEach(rt => checkRuntime(rt.id));
     } catch (e) {
       console.error(e);
     } finally {
@@ -170,9 +184,10 @@ export default function RuntimesPage() {
   useEffect(() => { load(); }, []);
 
   async function handleCreate(data) {
-    await api.post('/runtimes', { ...data, workspace_id: workspaceId });
+    const created = await api.post('/runtimes', { ...data, workspace_id: workspaceId });
     setModalOpen(false);
     load();
+    if (created?.id) checkRuntime(created.id);
   }
 
   async function handleEdit(data) {
@@ -248,6 +263,7 @@ export default function RuntimesPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {runtimes.map(rt => {
             const meta = getRuntimeMeta(rt.runtime_type);
+            const status = checkStatuses[rt.id];
             return (
               <div key={rt.id} className="bg-[#16181c] border border-[#2a2d35] rounded-xl p-5 hover:border-[#3a3d45] transition-colors group">
                 <div className="flex items-start justify-between mb-3">
@@ -255,17 +271,30 @@ export default function RuntimesPage() {
                     <Cpu size={16} className="text-purple-400" />
                   </div>
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button onClick={() => checkRuntime(rt.id)} title="Check binary availability" className="p-1.5 rounded text-gray-500 hover:text-blue-400 hover:bg-blue-500/10"><RefreshCw size={13} /></button>
                     <button onClick={() => setEditing(rt)} className="p-1.5 rounded text-gray-500 hover:text-white hover:bg-white/10"><Pencil size={13} /></button>
                     <button onClick={() => handleDelete(rt.id)} className="p-1.5 rounded text-gray-500 hover:text-red-400 hover:bg-red-500/10"><Trash2 size={13} /></button>
                   </div>
                 </div>
                 <h3 className="font-semibold text-white mb-1">{rt.name}</h3>
                 {meta?.description && <p className="text-xs text-gray-500 mb-2">{meta.description}</p>}
-                <div className="flex items-center gap-2 mt-2">
+                <div className="flex items-center gap-2 mt-2 flex-wrap">
                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${meta?.badge || 'bg-gray-500/20 text-gray-400'}`}>{meta?.label || rt.runtime_type}</span>
                   {rt.is_default ? <span className="text-xs px-2 py-0.5 rounded-full bg-green-500/20 text-green-400">default</span> : null}
+                  {status?.checking ? (
+                    <span className="flex items-center gap-1 text-xs text-gray-500"><Loader size={11} className="animate-spin" /> checking…</span>
+                  ) : status?.available === true ? (
+                    <span className="flex items-center gap-1 text-xs text-green-400"><CheckCircle size={11} /> installed</span>
+                  ) : status?.available === false ? (
+                    <span className="flex items-center gap-1 text-xs text-red-400"><XCircle size={11} /> not found</span>
+                  ) : status?.available === null ? (
+                    <span className="flex items-center gap-1 text-xs text-yellow-500"><XCircle size={11} /> check failed</span>
+                  ) : null}
                 </div>
                 {rt.binary_path && <p className="text-xs text-gray-500 mt-2 font-mono truncate">{rt.binary_path}</p>}
+                {!rt.binary_path && status?.path && (
+                  <p className="text-xs text-gray-600 mt-1 font-mono truncate" title={status.path}>{status.path}</p>
+                )}
                 {meta && (
                   <p className="text-xs text-gray-600 font-mono mt-1">{meta.invocation}</p>
                 )}
