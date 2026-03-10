@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Plus, Loader, ArrowLeft, MoreHorizontal } from 'lucide-react';
 import api from '../components/api.js';
@@ -11,11 +11,13 @@ const PRIORITY_COLORS = {
   low: 'text-gray-500',
 };
 
-function CardItem({ card, onClick }) {
+function CardItem({ card, onClick, onDragStart }) {
   return (
     <div
+      draggable
+      onDragStart={(e) => onDragStart(e, card)}
       onClick={() => onClick(card)}
-      className="bg-[#1e2128] border border-[#2a2d35] rounded-lg p-3 mb-2 cursor-pointer hover:border-blue-500/40 hover:bg-[#1e2128]/80 transition-all group"
+      className="bg-[#1e2128] border border-[#2a2d35] rounded-lg p-3 mb-2 cursor-grab active:cursor-grabbing hover:border-blue-500/40 hover:bg-[#1e2128]/80 transition-all group select-none"
     >
       <div className="text-sm font-medium text-white mb-2 leading-snug">{card.title}</div>
       {card.description && <p className="text-xs text-gray-500 mb-2 line-clamp-2">{card.description}</p>}
@@ -90,6 +92,8 @@ export default function BoardPage() {
   const [project, setProject] = useState(null);
   const [loading, setLoading] = useState(true);
   const [newCardModal, setNewCardModal] = useState(null); // { columnId }
+  const [dragOverColumnId, setDragOverColumnId] = useState(null);
+  const dragCardRef = useRef(null);
 
   async function load() {
     try {
@@ -113,11 +117,45 @@ export default function BoardPage() {
 
   async function createBoard() {
     try {
-      const proj = await api.get(`/projects/${id}`);
-      const newBoard = await api.post('/boards', { project_id: id, name: 'Main Board' });
+      await api.post('/boards', { project_id: id, name: 'Main Board' });
       await load();
     } catch (e) {
       console.error(e);
+    }
+  }
+
+  function handleDragStart(e, card) {
+    dragCardRef.current = card;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', card.id);
+  }
+
+  function handleDragOver(e, columnId) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverColumnId(columnId);
+  }
+
+  function handleDragLeave() {
+    setDragOverColumnId(null);
+  }
+
+  async function handleDrop(e, columnId) {
+    e.preventDefault();
+    setDragOverColumnId(null);
+    const card = dragCardRef.current;
+    if (!card || card.column_id === columnId) return;
+    dragCardRef.current = null;
+
+    // Optimistic update
+    setCards(prev => prev.map(c => c.id === card.id ? { ...c, column_id: columnId } : c));
+
+    try {
+      await api.put(`/cards/${card.id}`, { column_id: columnId });
+    } catch (err) {
+      console.error('Failed to move card:', err);
+      // Revert on failure
+      setCards(prev => prev.map(c => c.id === card.id ? { ...c, column_id: card.column_id } : c));
     }
   }
 
@@ -152,8 +190,15 @@ export default function BoardPage() {
           <div className="flex gap-4 h-full" style={{ minWidth: `${(board.columns?.length || 4) * 280 + 24}px` }}>
             {(board.columns || []).map(col => {
               const colCards = cards.filter(c => c.column_id === col.id);
+              const isDragTarget = dragOverColumnId === col.id;
               return (
-                <div key={col.id} className="flex flex-col w-64 flex-shrink-0">
+                <div
+                  key={col.id}
+                  className="flex flex-col w-64 flex-shrink-0"
+                  onDragOver={(e) => handleDragOver(e, col.id)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => handleDrop(e, col.id)}
+                >
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
                       <h3 className="text-sm font-medium text-gray-300">{col.name}</h3>
@@ -166,20 +211,25 @@ export default function BoardPage() {
                       <Plus size={14} />
                     </button>
                   </div>
-                  <div className="flex-1 overflow-y-auto">
+                  <div className={`flex-1 overflow-y-auto rounded-lg transition-colors min-h-16 ${isDragTarget ? 'bg-blue-500/10 ring-2 ring-blue-500/30' : ''}`}>
                     {colCards.map(card => (
                       <CardItem
                         key={card.id}
                         card={card}
                         onClick={() => navigate(`/projects/${id}/board/${card.id}`)}
+                        onDragStart={handleDragStart}
                       />
                     ))}
                     {colCards.length === 0 && (
                       <div
                         onClick={() => setNewCardModal({ columnId: col.id, boardId: board.id })}
-                        className="border-2 border-dashed border-[#2a2d35] rounded-lg p-4 text-center text-gray-600 text-xs cursor-pointer hover:border-[#3a3d45] hover:text-gray-400 transition-colors"
+                        className={`border-2 border-dashed rounded-lg p-4 text-center text-gray-600 text-xs cursor-pointer transition-colors ${
+                          isDragTarget
+                            ? 'border-blue-500/50 text-blue-400'
+                            : 'border-[#2a2d35] hover:border-[#3a3d45] hover:text-gray-400'
+                        }`}
                       >
-                        + Add card
+                        {isDragTarget ? 'Drop here' : '+ Add card'}
                       </div>
                     )}
                   </div>

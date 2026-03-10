@@ -15,7 +15,7 @@ const navItems = [
   { to: '/providers', icon: Cloud, label: 'Providers' },
   { to: '/queue', icon: PlaySquare, label: 'Queue' },
   { to: '/chat', icon: MessageSquare, label: 'Chat' },
-  { to: '/flows/new', icon: Workflow, label: 'Flows' },
+  { to: '/flows', icon: Workflow, label: 'Flows' },
   { to: '/settings', icon: Settings, label: 'Settings' },
 ];
 

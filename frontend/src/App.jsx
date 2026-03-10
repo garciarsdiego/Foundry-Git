@@ -15,6 +15,7 @@ import QueuePage from './pages/QueuePage.jsx';
 import RunDetailPage from './pages/RunDetailPage.jsx';
 import SettingsPage from './pages/SettingsPage.jsx';
 import ChatPage from './pages/ChatPage.jsx';
+import FlowsPage from './pages/FlowsPage.jsx';
 import FlowBuilderPage from './pages/FlowBuilderPage.jsx';
 import FlowDetailPage from './pages/FlowDetailPage.jsx';
 
@@ -37,6 +38,7 @@ export default function App() {
           <Route path="runs/:runId" element={<RunDetailPage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="chat" element={<ChatPage />} />
+          <Route path="flows" element={<FlowsPage />} />
           <Route path="flows/new" element={<FlowBuilderPage />} />
           <Route path="flows/:id" element={<FlowDetailPage />} />
         </Route>

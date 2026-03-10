@@ -16,6 +16,8 @@ import runsRouter from './routes/runs.js';
 import githubRouter from './routes/github.js';
 import executionRouter from './routes/execution.js';
 import settingsRouter from './routes/settings.js';
+import flowsRouter from './routes/flows.js';
+import chatRouter from './routes/chat.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -47,6 +49,8 @@ app.use('/api/runs', runsRouter);
 app.use('/api/github', githubRouter);
 app.use('/api/execute', executionRouter);
 app.use('/api/settings', settingsRouter);
+app.use('/api/flows', flowsRouter);
+app.use('/api/chat', chatRouter);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

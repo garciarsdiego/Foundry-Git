@@ -73,7 +73,7 @@ npm run start:frontend
 | `/` | DashboardPage | Stats overview and recent runs |
 | `/projects` | ProjectsPage | List/create projects with GitHub repo binding |
 | `/projects/:id` | ProjectDetailPage | Project detail with run history |
-| `/projects/:id/board` | BoardPage | Kanban board with cards |
+| `/projects/:id/board` | BoardPage | Kanban board with drag-and-drop card movement |
 | `/projects/:id/board/:taskId` | TaskDetailPage | Task detail with run creation |
 | `/agents` | AgentsPage | Agent configuration (provider or runtime mode) |
 | `/teams` | TeamsPage | Team management with agent membership |
@@ -82,9 +82,9 @@ npm run start:frontend
 | `/queue` | QueuePage | Run queue with status filtering |
 | `/runs/:runId` | RunDetailPage | Run detail with live event log |
 | `/settings` | SettingsPage | Workspace settings and GitHub connections |
-| `/chat` | ChatPage | Chat interface (Coming Soon) |
-| `/flows/new` | FlowBuilderPage | Visual flow builder (Coming Soon) |
-| `/flows/:id` | FlowDetailPage | Flow detail (Coming Soon) |
+| `/chat` | ChatPage | Chat interface with agent selection |
+| `/flows` | FlowsPage | Multi-agent flow list |
+| `/flows/:id` | FlowDetailPage | Flow editor with step management and run history |
 
 ## API Endpoints
 
@@ -104,10 +104,21 @@ npm run start:frontend
 | POST | `/api/runs/:id/cancel` | Cancel a run |
 | POST | `/api/execute` | Execute a card with an agent |
 | GET/POST/PUT/DELETE | `/api/github/connections` | GitHub connection CRUD |
-| POST | `/api/github/sync/:projectId` | Sync GitHub issues to cards (scaffold) |
-| GET | `/api/github/repos/:connectionId` | List repos for connection (scaffold) |
+| POST | `/api/github/sync/:projectId` | Sync GitHub issues to cards (Octokit) |
+| GET | `/api/github/repos/:connectionId` | List repos for connection (Octokit) |
+| GET | `/api/github/repos/:connectionId/:owner/:repo` | Inspect a specific repo |
+| POST | `/api/github/branch/:projectId/:runId` | Create branch for a run |
+| POST | `/api/github/pr/:runId` | Create PR for a run |
 | GET | `/api/settings` | Workspace settings summary |
 | GET | `/api/health` | Health check |
+| GET/POST/PUT/DELETE | `/api/flows` | Flow CRUD |
+| GET/POST/PUT/DELETE | `/api/flows/:id/steps` | Flow step management |
+| PUT | `/api/flows/:id/steps/reorder` | Reorder flow steps |
+| POST | `/api/flows/:id/run` | Execute a flow against a card |
+| GET | `/api/flows/:id/runs` | List flow run history |
+| POST | `/api/chat` | Send chat message (real AI or simulated) |
+| GET | `/api/chat/sessions/:sessionId` | Get chat session history |
+| GET | `/api/chat/sessions` | List recent chat sessions |
 
 ## Entity Model
 
@@ -150,28 +161,28 @@ Any agent can have a `fallback_provider_config_id`. If runtime execution fails, 
 
 ## What's Implemented
 
-- ✅ Full SQLite schema with all entities
+- ✅ Full SQLite schema with all entities (including flows, flow_steps, flow_runs, chat_messages)
 - ✅ REST API for all entities (CRUD)
-- ✅ Execution service (simulated dispatch with run events)
-- ✅ GitHub service scaffold (structure in place, Octokit integration pending)
-- ✅ React frontend with all 15 routes
-- ✅ Kanban board with card management
+- ✅ Execution service with real subprocess invocation for CLI runtimes (falls back to simulation if binary not installed)
+- ✅ Real provider API calls for OpenAI and Anthropic (uses configured api_key_env_var)
+- ✅ Execution policy enforcement: per-workspace retry and timeout configuration applied during dispatch
+- ✅ Real GitHub integration via Octokit: issue sync, branch creation, PR creation, repo listing
+- ✅ React frontend with all routes
+- ✅ Kanban board with drag-and-drop card movement between columns
 - ✅ Agent configuration with provider/runtime mode toggle
 - ✅ Run detail page with live event log polling
 - ✅ Dark theme UI throughout
 - ✅ Default workspace seed data on first run
+- ✅ Chat interface: select an agent, send messages, receive real AI responses (or simulated if no API key)
+- ✅ Flow builder: create multi-agent step pipelines, run flows against cards, view run history
 
 ## TODO / Future Work
 
-- [ ] Real Octokit integration for GitHub issue sync and branch/PR creation
-- [ ] Chat interface with WebSocket for live agent interaction
-- [ ] Visual flow builder with drag-and-drop multi-agent workflows
-- [ ] Drag-and-drop card movement on the Kanban board
-- [ ] Actual subprocess invocation for CLI runtimes
-- [ ] Actual API calls for provider execution
 - [ ] Authentication / multi-user support
+- [ ] WebSocket streaming for real-time chat and run output
 - [ ] Webhook support for GitHub event-driven runs
-- [ ] Execution policies (retry, timeout) enforcement
+- [ ] Visual drag-and-drop flow editor (currently step-list based)
+- [ ] Google, OpenRouter, MiniMax, GLM provider dispatch (currently OpenAI and Anthropic implemented)
 - [ ] Metrics and analytics dashboard
 
 ## Configuration

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { getDb } from '../db/index.js';
+import { syncIssues, inspectRepo, listRepos, createBranch, createPR } from '../services/githubService.js';
 
 const router = Router();
 
@@ -79,41 +80,53 @@ router.delete('/connections/:id', (req, res) => {
   }
 });
 
-// Sync GitHub issues to cards (scaffold)
+// Sync GitHub issues to cards
 router.post('/sync/:projectId', async (req, res) => {
   try {
-    const db = getDb();
-    const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.projectId);
-    if (!project) return res.status(404).json({ error: 'Project not found' });
-
-    // TODO: Use Octokit to fetch issues from project.repo_owner/project.repo_name
-    // For now, return a scaffold response
-    res.json({
-      message: 'GitHub issue sync scaffold - not yet connected to real API',
-      project_id: req.params.projectId,
-      repo: project.repo_owner && project.repo_name ? `${project.repo_owner}/${project.repo_name}` : null,
-      synced: 0,
-      todo: 'Configure GitHub connection and set repo_owner/repo_name on project'
-    });
+    const result = await syncIssues(req.params.projectId);
+    res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// List repos for a connection (scaffold)
+// List repos for a connection
 router.get('/repos/:connectionId', async (req, res) => {
   try {
-    const db = getDb();
-    const conn = db.prepare('SELECT * FROM github_connections WHERE id = ?').get(req.params.connectionId);
-    if (!conn) return res.status(404).json({ error: 'Connection not found' });
+    const repos = await listRepos(req.params.connectionId);
+    res.json(repos);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
-    // TODO: Use Octokit to list repos accessible with the token
-    res.json({
-      message: 'GitHub repo listing scaffold - not yet connected to real API',
-      connection_id: req.params.connectionId,
-      repos: [],
-      todo: 'Set access_token_env_var on the connection and implement Octokit call'
-    });
+// Inspect a specific repo
+router.get('/repos/:connectionId/:owner/:repo', async (req, res) => {
+  try {
+    const { connectionId, owner, repo } = req.params;
+    const data = await inspectRepo(connectionId, owner, repo);
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Create branch for a run
+router.post('/branch/:projectId/:runId', async (req, res) => {
+  try {
+    const result = await createBranch(req.params.projectId, req.params.runId);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Create PR for a run
+router.post('/pr/:runId', async (req, res) => {
+  try {
+    const { title, body } = req.body;
+    const result = await createPR(req.params.runId, title, body);
+    res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
