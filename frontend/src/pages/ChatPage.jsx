@@ -7,8 +7,13 @@ export default function ChatPage() {
   const [messages, setMessages] = useState([]);
   const [agents, setAgents] = useState([]);
   const [selectedAgent, setSelectedAgent] = useState(null);
-  const [sessionId, setSessionId] = useState(() => {
-    return localStorage.getItem('chat_session_id') || crypto.randomUUID();
+  const [sessionId] = useState(() => {
+    // Persist session ID so conversation continues across page reloads
+    const existing = localStorage.getItem('chat_session_id');
+    if (existing) return existing;
+    const newId = crypto.randomUUID();
+    localStorage.setItem('chat_session_id', newId);
+    return newId;
   });
   const [loading, setLoading] = useState(false);
   const [workspace, setWorkspace] = useState(null);
@@ -20,8 +25,6 @@ export default function ChatPage() {
       if (ws?.length) setWorkspace(ws[0]);
     }).catch(() => {});
     api.get('/agents').then(setAgents).catch(() => {});
-    // Persist sessionId to localStorage on mount
-    localStorage.setItem('chat_session_id', sessionId);
   }, []);
 
   useEffect(() => {

@@ -17,6 +17,7 @@ export function getDb() {
     db.pragma('journal_mode = WAL');
     db.pragma('foreign_keys = ON');
     initializeSchema();
+    runMigrations();
     seedDefaultData();
   }
   return db;
@@ -25,6 +26,41 @@ export function getDb() {
 function initializeSchema() {
   const schema = readFileSync(join(__dirname, 'schema.sql'), 'utf8');
   db.exec(schema);
+}
+
+/**
+ * Runs incremental migrations for existing databases.
+ * SQLite does not support ALTER TABLE ... MODIFY COLUMN, so we handle
+ * CHECK constraint expansions by recreating the table when needed.
+ */
+function runMigrations() {
+  // Check if the runtime_configs table has the old CHECK constraint (missing 'opencode')
+  const tableInfo = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='runtime_configs'").get();
+  if (tableInfo && tableInfo.sql && !tableInfo.sql.includes("'opencode'")) {
+    // Recreate the runtime_configs table with the updated CHECK constraint
+    db.exec(`
+      ALTER TABLE runtime_configs RENAME TO runtime_configs_old;
+
+      CREATE TABLE runtime_configs (
+        id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        runtime_type TEXT NOT NULL CHECK(runtime_type IN ('codex','claude-code','gemini-cli','kimi-code','kilo-code','opencode')),
+        binary_path TEXT,
+        extra_args TEXT,
+        is_default INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      INSERT INTO runtime_configs SELECT * FROM runtime_configs_old;
+      DROP TABLE runtime_configs_old;
+    `);
+    console.log('Migration: runtime_configs CHECK constraint updated to include opencode.');
+  }
+
+  // Add new tables for flows, flow_steps, flow_runs, chat_messages if not present
+  // (These are created by schema.sql via CREATE TABLE IF NOT EXISTS, so no extra migration needed)
 }
 
 function seedDefaultData() {

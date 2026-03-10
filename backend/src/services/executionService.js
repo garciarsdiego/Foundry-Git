@@ -102,39 +102,40 @@ async function withTimeout(promise, ms, runId) {
 
 export async function runtimeDispatch(run, agent, runtimeConfig) {
   const db = getDb();
-  const binaryPath = runtimeConfig?.binary_path || runtimeConfig?.runtime_type || 'unknown-runtime';
+  const runtimeType = runtimeConfig?.runtime_type;
+  const binaryPath = runtimeConfig?.binary_path || getDefaultBinary(runtimeType);
 
-  await logEvent(run.id, 'runtime_dispatch', `Dispatching to runtime: ${runtimeConfig?.runtime_type}`, {
+  await logEvent(run.id, 'runtime_dispatch', `Dispatching to runtime: ${runtimeType}`, {
     binary_path: binaryPath,
-    runtime_type: runtimeConfig?.runtime_type,
+    runtime_type: runtimeType,
   });
 
   const card = db.prepare('SELECT * FROM cards WHERE id = ?').get(run.card_id);
-  const extraArgs = runtimeConfig?.extra_args
-    ? runtimeConfig.extra_args.split(/\s+/).filter(Boolean)
-    : [];
-
   const taskPrompt = [
     card?.title ? `Task: ${card.title}` : '',
     card?.description ? `Description: ${card.description}` : '',
     agent?.system_prompt ? `Instructions: ${agent.system_prompt}` : '',
-  ].filter(Boolean).join('\n\n');
+  ].filter(Boolean).join('\n\n') || 'Execute the assigned task.';
+
+  // Build CLI args using the correct non-interactive flag for each runtime
+  const { args, useStdin } = buildRuntimeArgs(runtimeType, taskPrompt, runtimeConfig?.extra_args);
 
   return new Promise((resolve, reject) => {
     let child;
     try {
-      child = spawn(binaryPath, extraArgs, {
+      child = spawn(binaryPath, args, {
         env: { ...process.env },
         stdio: ['pipe', 'pipe', 'pipe'],
         shell: false,
       });
     } catch (spawnErr) {
-      // Binary not found or not executable — fall back to simulated output
       return simulateRuntimeExecution(run, runtimeConfig).then(resolve).catch(reject);
     }
 
-    if (taskPrompt && child.stdin.writable) {
+    if (useStdin && child.stdin.writable) {
       child.stdin.write(taskPrompt + '\n');
+      child.stdin.end();
+    } else if (child.stdin.writable) {
       child.stdin.end();
     }
 
@@ -172,6 +173,62 @@ export async function runtimeDispatch(run, agent, runtimeConfig) {
       }
     });
   });
+}
+
+/**
+ * Returns the default binary name for a given runtime type.
+ * These match the standard installation names for each CLI tool.
+ */
+function getDefaultBinary(runtimeType) {
+  const defaults = {
+    'codex': 'codex',
+    'claude-code': 'claude',
+    'gemini-cli': 'gemini',
+    'kimi-code': 'kimi',
+    'kilo-code': 'kilo',
+    'opencode': 'opencode',
+  };
+  return defaults[runtimeType] || runtimeType;
+}
+
+/**
+ * Builds the correct CLI arguments for non-interactive (headless) execution.
+ *
+ * Reference: https://github.com/code-yeongyu/oh-my-openagent
+ *
+ * - claude (Claude Code):    claude -p "<prompt>"
+ * - codex (Codex CLI):       codex "<prompt>"
+ * - gemini (Gemini CLI):     gemini -p "<prompt>"
+ * - opencode (OpenCode):     opencode run "<prompt>"
+ * - kimi-code:               stdin-based (no standard -p flag documented)
+ * - kilo-code:               stdin-based
+ */
+function buildRuntimeArgs(runtimeType, prompt, extraArgsStr) {
+  const extra = extraArgsStr ? extraArgsStr.split(/\s+/).filter(Boolean) : [];
+
+  switch (runtimeType) {
+    case 'claude-code':
+      // Claude Code: claude -p "prompt" [extra_args]
+      return { args: ['-p', prompt, ...extra], useStdin: false };
+
+    case 'codex':
+      // Codex CLI: codex "prompt" [extra_args]
+      return { args: [prompt, ...extra], useStdin: false };
+
+    case 'gemini-cli':
+      // Gemini CLI: gemini -p "prompt" [extra_args]
+      return { args: ['-p', prompt, ...extra], useStdin: false };
+
+    case 'opencode':
+      // OpenCode: opencode run "prompt" [extra_args]
+      return { args: ['run', prompt, ...extra], useStdin: false };
+
+    case 'kimi-code':
+    case 'kilo-code':
+    default:
+      // For CLIs without a documented headless flag, pass prompt via stdin
+      return { args: [...extra], useStdin: true };
+  }
 }
 
 async function simulateRuntimeExecution(run, runtimeConfig) {

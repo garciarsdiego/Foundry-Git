@@ -1,6 +1,6 @@
 # Foundry — AI Agent Orchestration Platform
 
-Foundry is a full-stack platform for managing, dispatching, and monitoring AI coding agents across software projects. It provides a unified workspace to configure AI providers (OpenAI, Anthropic, Google, etc.), CLI-based runtimes (Codex CLI, Claude Code, Gemini CLI, etc.), agents, teams, and Kanban-based project boards where tasks are dispatched to agents and executed as trackable runs.
+Foundry is a full-stack platform for managing, dispatching, and monitoring AI coding agents across software projects. It provides a unified workspace to configure AI providers (OpenAI, Anthropic, Google, etc.), CLI-based runtimes (OpenCode, Codex CLI, Claude Code, Gemini CLI, etc.), agents, teams, and Kanban-based project boards where tasks are dispatched to agents and executed as trackable runs.
 
 ## Architecture
 
@@ -151,10 +151,22 @@ The agent calls an AI provider API directly:
 - The `api_key_env_var` field names the environment variable holding the API key (key is never stored in DB)
 
 ### Runtime Mode
-The agent invokes a CLI tool installed on the server:
-- Supports: Codex CLI, Claude Code, Gemini CLI, Kimi Code, Kilo Code
+The agent invokes a CLI tool installed on the server. Each runtime is invoked in non-interactive (headless) mode:
+
+| `runtime_type` | Default binary | Invocation |
+|---|---|---|
+| `opencode` | `opencode` | `opencode run "<prompt>"` |
+| `claude-code` | `claude` | `claude -p "<prompt>"` |
+| `codex` | `codex` | `codex "<prompt>"` |
+| `gemini-cli` | `gemini` | `gemini -p "<prompt>"` |
+| `kimi-code` | `kimi` | stdin-based |
+| `kilo-code` | `kilo` | stdin-based |
+
+> **Recommended**: [OpenCode](https://opencode.ai) with the [oh-my-openagent](https://github.com/code-yeongyu/oh-my-openagent) plugin lets you orchestrate Claude, GPT, Gemini, Kimi, and GLM agents from one CLI. Install OpenCode, then `bunx oh-my-opencode install` to configure multi-provider agent switching.
+
 - Configuration: `runtime_config_id` on the agent, with optional `binary_path` and `extra_args`
-- The runtime is invoked as a subprocess, with output streamed as run events
+- The runtime is invoked as a subprocess with stdout/stderr streamed as run events
+- If the binary is not installed, execution falls back to a simulation with helpful hints
 
 ### Fallback
 Any agent can have a `fallback_provider_config_id`. If runtime execution fails, the execution service will automatically retry using the fallback provider.
@@ -164,6 +176,8 @@ Any agent can have a `fallback_provider_config_id`. If runtime execution fails, 
 - ✅ Full SQLite schema with all entities (including flows, flow_steps, flow_runs, chat_messages)
 - ✅ REST API for all entities (CRUD)
 - ✅ Execution service with real subprocess invocation for CLI runtimes (falls back to simulation if binary not installed)
+- ✅ Per-runtime non-interactive invocation flags (`claude -p`, `opencode run`, `gemini -p`, `codex` positional)
+- ✅ OpenCode runtime support with [oh-my-openagent](https://github.com/code-yeongyu/oh-my-openagent) compatibility
 - ✅ Real provider API calls for OpenAI and Anthropic (uses configured api_key_env_var)
 - ✅ Execution policy enforcement: per-workspace retry and timeout configuration applied during dispatch
 - ✅ Real GitHub integration via Octokit: issue sync, branch creation, PR creation, repo listing

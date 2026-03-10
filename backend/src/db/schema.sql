@@ -74,7 +74,7 @@ CREATE TABLE IF NOT EXISTS runtime_configs (
   id TEXT PRIMARY KEY,
   workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
-  runtime_type TEXT NOT NULL CHECK(runtime_type IN ('codex','claude-code','gemini-cli','kimi-code','kilo-code')),
+  runtime_type TEXT NOT NULL CHECK(runtime_type IN ('codex','claude-code','gemini-cli','kimi-code','kilo-code','opencode')),
   binary_path TEXT,
   extra_args TEXT,
   is_default INTEGER NOT NULL DEFAULT 0,
