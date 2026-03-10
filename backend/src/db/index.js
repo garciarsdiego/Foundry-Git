@@ -207,7 +207,8 @@ function seedDefaultData() {
   seedStarterAgents(workspaceId);
 }
 
-function seedAdminUser(workspaceId) {  const adminPassword = process.env.FOUNDRY_ADMIN_PASSWORD;
+function seedAdminUser(workspaceId) {
+  const adminPassword = process.env.FOUNDRY_ADMIN_PASSWORD;
   if (!adminPassword) return;
 
   const existing = db.prepare("SELECT id FROM users WHERE username = 'admin'").get();

@@ -266,6 +266,9 @@ function FlowCanvas({ steps, flowId, canvasLayout, onLayoutChange, onDelete, onA
   const canvasRef = useRef(null);
   const saveTimer = useRef(null);
 
+  // Stable step-id key to avoid recomputing on every render
+  const stepIdsKey = steps.map(s => s.id).join(',');
+
   // Re-initialize positions when steps change
   useEffect(() => {
     const layout = canvasLayout || {};
@@ -273,13 +276,18 @@ function FlowCanvas({ steps, flowId, canvasLayout, onLayoutChange, onDelete, onA
       acc[step.id] = layout[step.id] || { x: 80 + i * (NODE_W + 60), y: 200 };
       return acc;
     }, {}));
+  // stepIdsKey is a stable string derived from step ids — safe to use as dep
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [steps.map(s => s.id).join(',')]);
+  }, [stepIdsKey]);
+
+  // Keep a ref to canvasRef.current so callbacks always read the latest DOM node
+  const canvasElRef = canvasRef;
 
   function getCanvasXY(e) {
-    const rect = canvasRef.current?.getBoundingClientRect();
-    if (!rect) return { x: 0, y: 0 };
-    return { x: e.clientX - rect.left + canvasRef.current.scrollLeft, y: e.clientY - rect.top + canvasRef.current.scrollTop };
+    const el = canvasElRef.current;
+    if (!el) return { x: 0, y: 0 };
+    const rect = el.getBoundingClientRect();
+    return { x: e.clientX - rect.left + el.scrollLeft, y: e.clientY - rect.top + el.scrollTop };
   }
 
   function handleMouseDown(e, stepId) {
@@ -292,11 +300,16 @@ function FlowCanvas({ steps, flowId, canvasLayout, onLayoutChange, onDelete, onA
 
   const handleMouseMove = useCallback((e) => {
     if (!dragging) return;
-    const { x, y } = getCanvasXY(e);
+    const el = canvasElRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const x = e.clientX - rect.left + el.scrollLeft;
+    const y = e.clientY - rect.top + el.scrollTop;
     const nx = Math.max(0, Math.min(CANVAS_W - NODE_W, snap(x - dragging.offsetX)));
     const ny = Math.max(0, Math.min(CANVAS_H - NODE_H, snap(y - dragging.offsetY)));
     setPositions(prev => ({ ...prev, [dragging.id]: { x: nx, y: ny } }));
-  }, [dragging]);
+  // canvasElRef is a stable ref object — including it doesn't cause re-creation
+  }, [dragging, canvasElRef]);
 
   const handleMouseUp = useCallback(() => {
     if (!dragging) return;
@@ -546,6 +559,12 @@ export default function FlowDetailPage() {
     }
   }
 
+  // Memoize parsed canvas layout to avoid JSON.parse on every render
+  const parsedCanvasLayout = React.useMemo(() => {
+    if (!flow?.canvas_layout_json) return null;
+    try { return JSON.parse(flow.canvas_layout_json); } catch { return null; }
+  }, [flow?.canvas_layout_json]);
+
   if (loading) return (
     <div className="flex items-center justify-center h-64 text-gray-500">
       <Loader size={20} className="animate-spin mr-2" /> Loading flow...
@@ -672,7 +691,7 @@ export default function FlowDetailPage() {
             <FlowCanvas
               steps={steps}
               flowId={id}
-              canvasLayout={flow?.canvas_layout_json ? JSON.parse(flow.canvas_layout_json) : null}
+              canvasLayout={parsedCanvasLayout}
               onLayoutChange={handleCanvasLayoutChange}
               onDelete={deleteStep}
               onAddStep={() => setShowAddStep(true)}

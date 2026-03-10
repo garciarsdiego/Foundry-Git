@@ -103,20 +103,21 @@ router.post('/', async (req, res) => {
     }
 
     // Plan mode: prepend the user message with a planning instruction
-    let effectiveMessage = message;
-    if (plan_mode) {
-      effectiveMessage = `Before answering, create a brief plan with numbered steps, then execute the plan.\n\n${message}`;
-    }
+    const effectiveMessage = plan_mode
+      ? `Before answering, create a brief plan with numbered steps, then execute the plan.\n\n${message}`
+      : message;
 
-    // Modify history to use effectiveMessage for the last user turn
-    const historyWithOverride = history.map((h, i) => (i === history.length - 1 && h.role === 'user')
-      ? { ...h, content: effectiveMessage }
-      : h
-    );
-    // If history didn't end with a user message (new session), the user message was just inserted
-    const chatHistory = historyWithOverride.length > 0 && historyWithOverride[historyWithOverride.length - 1].role === 'user'
-      ? historyWithOverride
-      : [...historyWithOverride, { role: 'user', content: effectiveMessage }];
+    // Build the conversation history for the provider call.
+    // The history query fetches messages already in the DB (including the user message
+    // just inserted above). We replace the last user turn with effectiveMessage so that
+    // plan_mode and reasoning decorations are applied without double-inserting.
+    const chatHistory = history.length > 0
+      ? history.map((h, i) =>
+          i === history.length - 1 && h.role === 'user'
+            ? { role: 'user', content: effectiveMessage }
+            : { role: h.role, content: h.content }
+        )
+      : [{ role: 'user', content: effectiveMessage }];
 
     let assistantContent = null;
     let responseMetadata = {};

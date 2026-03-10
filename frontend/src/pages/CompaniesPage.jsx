@@ -245,7 +245,7 @@ export default function CompaniesPage() {
     try {
       const c = await api.get(`/companies/${id}`);
       setViewing(c);
-      setCompanies(prev => prev.map(x => x.id === id ? { ...x, ...c } : x));
+      setCompanies(prev => prev.map(x => x.id === id ? c : x));
     } catch {}
   }
 
@@ -360,7 +360,7 @@ export default function CompaniesPage() {
         <CompanyForm onSubmit={handleCreate} onCancel={() => setModalOpen(false)} />
       </Modal>
       <Modal isOpen={!!editing} onClose={() => setEditing(null)} title="Edit Company" size="lg">
-        {editing && <CompanyForm initial={editing} onSubmit={handleEdit} onCancel={() => setEditing(null)} />}
+        {editing && <CompanyForm key={editing.id} initial={editing} onSubmit={handleEdit} onCancel={() => setEditing(null)} />}
       </Modal>
       <ConfirmModal
         isOpen={!!confirmDelete}

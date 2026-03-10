@@ -108,7 +108,10 @@ function ChatSettingsPanel({ providers, chatOptions, onChange, onClose }) {
         <div>
           <label className="block text-xs font-medium text-gray-400 mb-2 uppercase tracking-wider">Plan Mode</label>
           <button
+            role="switch"
+            aria-checked={chatOptions.plan_mode}
             onClick={() => onChange({ plan_mode: !chatOptions.plan_mode })}
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onChange({ plan_mode: !chatOptions.plan_mode }); } }}
             className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg border transition-colors ${
               chatOptions.plan_mode
                 ? 'bg-green-600/20 border-green-500/40 text-green-300'
@@ -122,7 +125,7 @@ function ChatSettingsPanel({ providers, chatOptions, onChange, onClose }) {
                 <div className="text-xs text-gray-500">Agent creates a plan first</div>
               </div>
             </div>
-            <div className={`w-8 h-4 rounded-full transition-colors ${chatOptions.plan_mode ? 'bg-green-500' : 'bg-gray-700'}`}>
+            <div aria-hidden="true" className={`w-8 h-4 rounded-full transition-colors ${chatOptions.plan_mode ? 'bg-green-500' : 'bg-gray-700'}`}>
               <div className={`w-3 h-3 bg-white rounded-full mt-0.5 transition-transform ${chatOptions.plan_mode ? 'translate-x-4' : 'translate-x-0.5'}`} />
             </div>
           </button>
