@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Users, Loader, Pencil, Trash2, UserPlus, UserMinus } from 'lucide-react';
 import api from '../components/api.js';
 import Modal from '../components/Modal.jsx';
+import ConfirmModal from '../components/ConfirmModal.jsx';
+import { useToast } from '../components/Toast.jsx';
 
 export default function TeamsPage() {
   const [teams, setTeams] = useState([]);
@@ -13,6 +15,8 @@ export default function TeamsPage() {
   const [saving, setSaving] = useState(false);
   const [selectedAgent, setSelectedAgent] = useState('');
   const [workspaceId, setWorkspaceId] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState(null);
+  const toast = useToast();
 
   async function load() {
     try {
@@ -48,16 +52,23 @@ export default function TeamsPage() {
       setForm({ name: '', description: '' });
       load();
     } catch (err) {
-      alert(err.message);
+      toast(err.message, 'error');
     } finally {
       setSaving(false);
     }
   }
 
   async function handleDelete(id) {
-    if (!confirm('Delete this team?')) return;
-    await api.delete(`/teams/${id}`);
-    load();
+    setConfirmDelete(id);
+  }
+
+  async function confirmDeleteTeam() {
+    try {
+      await api.delete(`/teams/${confirmDelete}`);
+      load();
+    } catch (err) {
+      toast(err.message, 'error');
+    }
   }
 
   async function addMember() {
@@ -69,7 +80,7 @@ export default function TeamsPage() {
       setSelectedAgent('');
       load();
     } catch (err) {
-      alert(err.message);
+      toast(err.message, 'error');
     }
   }
 
@@ -112,7 +123,7 @@ export default function TeamsPage() {
                 </div>
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                   <button onClick={() => openTeamMembers(team)} className="p-1.5 rounded text-gray-500 hover:text-white hover:bg-white/10" title="Manage members"><UserPlus size={13} /></button>
-                  <button onClick={() => handleDelete(team.id)} className="p-1.5 rounded text-gray-500 hover:text-red-400 hover:bg-red-500/10"><Trash2 size={13} /></button>
+                  <button onClick={() => setConfirmDelete(team.id)} className="p-1.5 rounded text-gray-500 hover:text-red-400 hover:bg-red-500/10"><Trash2 size={13} /></button>
                 </div>
               </div>
               <h3 className="font-semibold text-white mb-1">{team.name}</h3>
@@ -183,6 +194,14 @@ export default function TeamsPage() {
           </div>
         )}
       </Modal>
+      <ConfirmModal
+        isOpen={!!confirmDelete}
+        onClose={() => setConfirmDelete(null)}
+        onConfirm={confirmDeleteTeam}
+        title="Delete Team"
+        message="Are you sure you want to delete this team? This cannot be undone."
+        confirmLabel="Delete Team"
+      />
     </div>
   );
 }

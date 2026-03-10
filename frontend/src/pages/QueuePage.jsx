@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { PlaySquare, Loader, RefreshCw, Filter } from 'lucide-react';
 import api from '../components/api.js';
 import StatusBadge from '../components/StatusBadge.jsx';
+import ConfirmModal from '../components/ConfirmModal.jsx';
 
 const STATUS_FILTERS = ['all', 'queued', 'running', 'success', 'failed', 'cancelled'];
 
@@ -11,6 +12,7 @@ export default function QueuePage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
   const [refreshing, setRefreshing] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(null);
 
   async function load(silent = false) {
     if (!silent) setLoading(true);
@@ -32,12 +34,15 @@ export default function QueuePage() {
   async function handleCancel(runId, e) {
     e.preventDefault();
     e.stopPropagation();
-    if (!confirm('Cancel this run?')) return;
+    setConfirmCancel(runId);
+  }
+
+  async function confirmCancelRun() {
     try {
-      await api.post(`/runs/${runId}/cancel`, {});
+      await api.post(`/runs/${confirmCancel}/cancel`, {});
       load(true);
     } catch (err) {
-      alert(err.message);
+      console.error(err);
     }
   }
 
@@ -133,6 +138,15 @@ export default function QueuePage() {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={!!confirmCancel}
+        onClose={() => setConfirmCancel(null)}
+        onConfirm={confirmCancelRun}
+        title="Cancel Run"
+        message="Are you sure you want to cancel this run?"
+        confirmLabel="Cancel Run"
+      />
     </div>
   );
 }

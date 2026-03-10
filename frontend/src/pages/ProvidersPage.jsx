@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Cloud, Loader, Pencil, Trash2 } from 'lucide-react';
 import api from '../components/api.js';
 import Modal from '../components/Modal.jsx';
+import ConfirmModal from '../components/ConfirmModal.jsx';
 
 const PROVIDER_TYPES = [
   { value: 'openai', label: 'OpenAI', desc: 'GPT-4o, GPT-4 Turbo, and more' },
@@ -119,6 +120,7 @@ export default function ProvidersPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [workspaceId, setWorkspaceId] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState(null);
 
   async function load() {
     try {
@@ -147,8 +149,11 @@ export default function ProvidersPage() {
   }
 
   async function handleDelete(id) {
-    if (!confirm('Delete this provider config?')) return;
-    await api.delete(`/providers/${id}`);
+    setConfirmDelete(id);
+  }
+
+  async function confirmDeleteProvider() {
+    await api.delete(`/providers/${confirmDelete}`);
     load();
   }
 
@@ -207,6 +212,14 @@ export default function ProvidersPage() {
       <Modal isOpen={!!editing} onClose={() => setEditing(null)} title="Edit Provider Config" size="lg">
         {editing && <ProviderForm initial={editing} onSubmit={handleEdit} onCancel={() => setEditing(null)} />}
       </Modal>
+      <ConfirmModal
+        isOpen={!!confirmDelete}
+        onClose={() => setConfirmDelete(null)}
+        onConfirm={confirmDeleteProvider}
+        title="Delete Provider"
+        message="Are you sure you want to delete this provider configuration?"
+        confirmLabel="Delete Provider"
+      />
     </div>
   );
 }

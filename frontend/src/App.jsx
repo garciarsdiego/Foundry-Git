@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Shell from './components/Shell.jsx';
+import { ToastProvider } from './components/Toast.jsx';
 import DashboardPage from './pages/DashboardPage.jsx';
 import ProjectsPage from './pages/ProjectsPage.jsx';
 import ProjectDetailPage from './pages/ProjectDetailPage.jsx';
@@ -19,7 +20,8 @@ import FlowDetailPage from './pages/FlowDetailPage.jsx';
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <ToastProvider>
+      <BrowserRouter>
       <Routes>
         <Route path="/" element={<Shell />}>
           <Route index element={<DashboardPage />} />
@@ -40,5 +42,6 @@ export default function App() {
         </Route>
       </Routes>
     </BrowserRouter>
+    </ToastProvider>
   );
 }

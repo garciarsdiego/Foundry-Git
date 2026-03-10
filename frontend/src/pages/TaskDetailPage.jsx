@@ -4,6 +4,7 @@ import { ArrowLeft, Play, Bot, Flag, Tag, Loader, CheckCircle } from 'lucide-rea
 import api from '../components/api.js';
 import StatusBadge from '../components/StatusBadge.jsx';
 import Modal from '../components/Modal.jsx';
+import { useToast } from '../components/Toast.jsx';
 
 export default function TaskDetailPage() {
   const { id: projectId, taskId } = useParams();
@@ -18,6 +19,7 @@ export default function TaskDetailPage() {
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState({});
   const [saving, setSaving] = useState(false);
+  const toast = useToast();
 
   async function load() {
     try {
@@ -53,7 +55,7 @@ export default function TaskDetailPage() {
       setRunModal(false);
       navigate(`/runs/${run.id}`);
     } catch (e) {
-      alert(e.message);
+      toast(e.message, 'error');
     } finally {
       setRunning(false);
     }
@@ -66,7 +68,7 @@ export default function TaskDetailPage() {
       setEditing(false);
       load();
     } catch (e) {
-      alert(e.message);
+      toast(e.message, 'error');
     } finally {
       setSaving(false);
     }

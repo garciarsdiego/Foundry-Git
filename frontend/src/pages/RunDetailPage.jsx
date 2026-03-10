@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, Loader, RefreshCw, Terminal, Info, AlertCircle, CheckCircle, XCircle, Zap } from 'lucide-react';
 import api from '../components/api.js';
 import StatusBadge from '../components/StatusBadge.jsx';
+import ConfirmModal from '../components/ConfirmModal.jsx';
 
 const EVENT_ICONS = {
   created: Info,
@@ -41,6 +42,7 @@ export default function RunDetailPage() {
   const [run, setRun] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
   const eventsEndRef = useRef(null);
 
   async function load(silent = false) {
@@ -73,12 +75,11 @@ export default function RunDetailPage() {
   }, [run?.events?.length]);
 
   async function handleCancel() {
-    if (!confirm('Cancel this run?')) return;
     try {
       await api.post(`/runs/${runId}/cancel`, {});
       load(true);
     } catch (err) {
-      alert(err.message);
+      console.error(err);
     }
   }
 
@@ -124,7 +125,7 @@ export default function RunDetailPage() {
             <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} />
           </button>
           {['queued', 'running'].includes(run.status) && (
-            <button onClick={handleCancel} className="px-3 py-1.5 bg-red-600/20 hover:bg-red-600/30 border border-red-500/30 text-red-400 rounded-lg text-sm transition-colors">
+            <button onClick={() => setConfirmCancel(true)} className="px-3 py-1.5 bg-red-600/20 hover:bg-red-600/30 border border-red-500/30 text-red-400 rounded-lg text-sm transition-colors">
               Cancel
             </button>
           )}
@@ -216,6 +217,15 @@ export default function RunDetailPage() {
         {run.started_at && <span>Started: {new Date(run.started_at).toLocaleString()}</span>}
         {run.finished_at && <span>Finished: {new Date(run.finished_at).toLocaleString()}</span>}
       </div>
+
+      <ConfirmModal
+        isOpen={confirmCancel}
+        onClose={() => setConfirmCancel(false)}
+        onConfirm={handleCancel}
+        title="Cancel Run"
+        message="Are you sure you want to cancel this run?"
+        confirmLabel="Cancel Run"
+      />
     </div>
   );
 }

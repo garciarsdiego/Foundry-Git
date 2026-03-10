@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Github, Settings, Loader, Trash2, Pencil, Check } from 'lucide-react';
 import api from '../components/api.js';
 import Modal from '../components/Modal.jsx';
+import ConfirmModal from '../components/ConfirmModal.jsx';
 
 function GitHubConnectionForm({ initial = {}, onSubmit, onCancel, workspaceId }) {
   const [form, setForm] = useState({
@@ -69,6 +70,7 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [ghModal, setGhModal] = useState(false);
   const [editingConn, setEditingConn] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(null);
 
   async function load() {
     try {
@@ -96,8 +98,11 @@ export default function SettingsPage() {
   }
 
   async function handleDeleteConn(id) {
-    if (!confirm('Delete this GitHub connection?')) return;
-    await api.delete(`/github/connections/${id}`);
+    setConfirmDelete(id);
+  }
+
+  async function confirmDeleteConn() {
+    await api.delete(`/github/connections/${confirmDelete}`);
     load();
   }
 
@@ -193,6 +198,14 @@ export default function SettingsPage() {
       <Modal isOpen={!!editingConn} onClose={() => setEditingConn(null)} title="Edit GitHub Connection">
         {editingConn && <GitHubConnectionForm initial={editingConn} workspaceId={settings?.workspace?.id} onSubmit={handleEditConn} onCancel={() => setEditingConn(null)} />}
       </Modal>
+      <ConfirmModal
+        isOpen={!!confirmDelete}
+        onClose={() => setConfirmDelete(null)}
+        onConfirm={confirmDeleteConn}
+        title="Delete Connection"
+        message="Are you sure you want to delete this GitHub connection?"
+        confirmLabel="Delete"
+      />
     </div>
   );
 }

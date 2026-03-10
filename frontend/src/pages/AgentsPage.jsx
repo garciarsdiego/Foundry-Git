@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Bot, Loader, Pencil, Trash2, Cpu, Cloud } from 'lucide-react';
 import api from '../components/api.js';
 import Modal from '../components/Modal.jsx';
+import ConfirmModal from '../components/ConfirmModal.jsx';
 
 const EXECUTION_MODES = ['provider', 'runtime'];
 
@@ -98,6 +99,7 @@ export default function AgentsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [workspaceId, setWorkspaceId] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState(null);
 
   async function load() {
     try {
@@ -133,8 +135,11 @@ export default function AgentsPage() {
   }
 
   async function handleDelete(id) {
-    if (!confirm('Delete this agent?')) return;
-    await api.delete(`/agents/${id}`);
+    setConfirmDelete(id);
+  }
+
+  async function confirmDeleteAgent() {
+    await api.delete(`/agents/${confirmDelete}`);
     load();
   }
 
@@ -194,6 +199,14 @@ export default function AgentsPage() {
       <Modal isOpen={!!editing} onClose={() => setEditing(null)} title="Edit Agent" size="lg">
         {editing && <AgentForm initial={editing} providers={providers} runtimes={runtimes} onSubmit={handleEdit} onCancel={() => setEditing(null)} />}
       </Modal>
+      <ConfirmModal
+        isOpen={!!confirmDelete}
+        onClose={() => setConfirmDelete(null)}
+        onConfirm={confirmDeleteAgent}
+        title="Delete Agent"
+        message="Are you sure you want to delete this agent? This cannot be undone."
+        confirmLabel="Delete Agent"
+      />
     </div>
   );
 }

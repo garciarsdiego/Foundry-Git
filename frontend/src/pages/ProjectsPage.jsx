@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Plus, FolderKanban, Github, Loader, Pencil, Trash2 } from 'lucide-react';
 import api from '../components/api.js';
 import Modal from '../components/Modal.jsx';
+import ConfirmModal from '../components/ConfirmModal.jsx';
 
 function slugify(str) {
   return str.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
@@ -85,6 +86,7 @@ export default function ProjectsPage() {
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(null);
   const workspaceId = 'default';
 
   async function load() {
@@ -116,8 +118,11 @@ export default function ProjectsPage() {
   }
 
   async function handleDelete(id) {
-    if (!confirm('Delete this project? This cannot be undone.')) return;
-    await api.delete(`/projects/${id}`);
+    setConfirmDelete(id);
+  }
+
+  async function confirmDeleteProject() {
+    await api.delete(`/projects/${confirmDelete}`);
     load();
   }
 
@@ -184,6 +189,14 @@ export default function ProjectsPage() {
       <Modal isOpen={!!editing} onClose={() => setEditing(null)} title="Edit Project" size="lg">
         {editing && <ProjectForm initial={editing} onSubmit={handleEdit} onCancel={() => setEditing(null)} />}
       </Modal>
+      <ConfirmModal
+        isOpen={!!confirmDelete}
+        onClose={() => setConfirmDelete(null)}
+        onConfirm={confirmDeleteProject}
+        title="Delete Project"
+        message="Are you sure you want to delete this project? All boards, cards, and runs will be permanently removed."
+        confirmLabel="Delete Project"
+      />
     </div>
   );
 }

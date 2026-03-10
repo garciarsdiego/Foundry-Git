@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Cpu, Loader, Pencil, Trash2 } from 'lucide-react';
 import api from '../components/api.js';
 import Modal from '../components/Modal.jsx';
+import ConfirmModal from '../components/ConfirmModal.jsx';
 
 const RUNTIME_TYPES = [
   { value: 'codex', label: 'Codex CLI' },
@@ -79,6 +80,7 @@ export default function RuntimesPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [workspaceId, setWorkspaceId] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState(null);
 
   async function load() {
     try {
@@ -107,8 +109,11 @@ export default function RuntimesPage() {
   }
 
   async function handleDelete(id) {
-    if (!confirm('Delete this runtime config?')) return;
-    await api.delete(`/runtimes/${id}`);
+    setConfirmDelete(id);
+  }
+
+  async function confirmDeleteRuntime() {
+    await api.delete(`/runtimes/${confirmDelete}`);
     load();
   }
 
@@ -173,6 +178,14 @@ export default function RuntimesPage() {
       <Modal isOpen={!!editing} onClose={() => setEditing(null)} title="Edit Runtime Config">
         {editing && <RuntimeForm initial={editing} onSubmit={handleEdit} onCancel={() => setEditing(null)} />}
       </Modal>
+      <ConfirmModal
+        isOpen={!!confirmDelete}
+        onClose={() => setConfirmDelete(null)}
+        onConfirm={confirmDeleteRuntime}
+        title="Delete Runtime"
+        message="Are you sure you want to delete this runtime configuration?"
+        confirmLabel="Delete Runtime"
+      />
     </div>
   );
 }
