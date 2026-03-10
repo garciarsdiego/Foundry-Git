@@ -19,9 +19,19 @@ export function authMiddleware(req, res, next) {
 
   const token = header.slice(7);
   try {
-    req.user = jwt.verify(token, JWT_SECRET);
+    const payload = jwt.verify(token, JWT_SECRET);
+    req.user = payload; // { id, username, role } for user tokens or { role } for legacy admin tokens
     next();
   } catch {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
+}
+
+/** Helper to check if the authenticated user has admin role */
+export function requireAdmin(req, res, next) {
+  if (!AUTH_ENABLED) return next();
+  if (req.user?.role !== 'admin') {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+  next();
 }

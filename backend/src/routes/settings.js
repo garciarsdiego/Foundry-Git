@@ -12,12 +12,14 @@ router.get('/', (req, res) => {
     const providers = db.prepare('SELECT * FROM provider_configs WHERE workspace_id = ?').all(workspace.id);
     const runtimes = db.prepare('SELECT * FROM runtime_configs WHERE workspace_id = ?').all(workspace.id);
     const githubConnections = db.prepare('SELECT * FROM github_connections WHERE workspace_id = ?').all(workspace.id);
+    const webhooks = db.prepare('SELECT * FROM webhook_configs WHERE workspace_id = ?').all(workspace.id);
 
     res.json({
       workspace,
       providers,
       runtimes,
       github_connections: githubConnections,
+      webhooks,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });

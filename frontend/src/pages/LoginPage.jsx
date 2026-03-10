@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Zap, Lock, Loader } from 'lucide-react';
+import { Zap, Lock, Loader, User } from 'lucide-react';
 import { setToken } from '../components/api.js';
 
 export default function LoginPage() {
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [legacyMode, setLegacyMode] = useState(false);
   const navigate = useNavigate();
 
   // Check if auth is even enabled
@@ -25,13 +27,15 @@ export default function LoginPage() {
   async function handleSubmit(e) {
     e.preventDefault();
     if (!password.trim()) return setError('Password is required');
+    if (!legacyMode && !username.trim()) return setError('Username is required');
     setLoading(true);
     setError('');
     try {
+      const body = legacyMode ? { password } : { username: username.trim(), password };
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -72,13 +76,31 @@ export default function LoginPage() {
                 {error}
               </div>
             )}
+            {!legacyMode && (
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Username</label>
+                <div className="relative">
+                  <User size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+                  <input
+                    type="text"
+                    value={username}
+                    onChange={e => setUsername(e.target.value)}
+                    autoFocus
+                    placeholder="Enter your username"
+                    className="w-full bg-[#0d0d0f] border border-[#2a2d35] rounded-lg pl-9 pr-3 py-2.5 text-white text-sm focus:outline-none focus:border-blue-500 placeholder-gray-600"
+                  />
+                </div>
+              </div>
+            )}
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Admin Password</label>
+              <label className="block text-sm text-gray-400 mb-1">
+                {legacyMode ? 'Admin Password' : 'Password'}
+              </label>
               <input
                 type="password"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
-                autoFocus
+                autoFocus={legacyMode}
                 placeholder="Enter your password"
                 className="w-full bg-[#0d0d0f] border border-[#2a2d35] rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-blue-500 placeholder-gray-600"
               />
@@ -92,7 +114,16 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <p className="text-xs text-gray-600 text-center mt-4">
+          <div className="mt-4 text-center">
+            <button
+              onClick={() => { setLegacyMode(!legacyMode); setError(''); }}
+              className="text-xs text-gray-600 hover:text-gray-400 underline transition-colors"
+            >
+              {legacyMode ? 'Sign in with username' : 'Use admin password only'}
+            </button>
+          </div>
+
+          <p className="text-xs text-gray-600 text-center mt-3">
             Set <code className="text-gray-500">FOUNDRY_ADMIN_PASSWORD</code> in backend .env to enable authentication.
           </p>
         </div>

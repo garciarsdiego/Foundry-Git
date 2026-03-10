@@ -3,6 +3,7 @@ import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { v4 as uuidv4 } from 'uuid';
+import { scryptSync, randomBytes, timingSafeEqual } from 'crypto';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -117,11 +118,36 @@ function runMigrations() {
 
   // skills and agent_skills are created by schema.sql via CREATE TABLE IF NOT EXISTS
   // mcp_servers is created by schema.sql via CREATE TABLE IF NOT EXISTS
+  // users and webhook_configs are created by schema.sql via CREATE TABLE IF NOT EXISTS
+  // (no additional column migrations needed — all new tables use CREATE TABLE IF NOT EXISTS)
+}
+
+export function hashPassword(password) {
+  const salt = randomBytes(16).toString('hex');
+  const hash = scryptSync(password, salt, 64).toString('hex');
+  return `${salt}:${hash}`;
+}
+
+export function verifyPassword(password, stored) {
+  try {
+    const [salt, hash] = stored.split(':');
+    if (!salt || !hash) return false;
+    const hashBuf = Buffer.from(hash, 'hex');
+    const candidateBuf = scryptSync(password, salt, 64);
+    return timingSafeEqual(hashBuf, candidateBuf);
+  } catch {
+    return false;
+  }
 }
 
 function seedDefaultData() {
   const existing = db.prepare('SELECT id FROM workspaces LIMIT 1').get();
-  if (existing) return;
+  if (existing) {
+    // Ensure the admin user is seeded whenever FOUNDRY_ADMIN_PASSWORD is set,
+    // even on existing databases that were created before multi-user support.
+    seedAdminUser(existing.id);
+    return;
+  }
 
   const workspaceId = uuidv4();
   db.prepare(`
@@ -170,6 +196,22 @@ function seedDefaultData() {
   }
 
   console.log('Seeded default workspace, project, board, and sample cards.');
+  seedAdminUser(workspaceId);
+}
+
+function seedAdminUser(workspaceId) {
+  const adminPassword = process.env.FOUNDRY_ADMIN_PASSWORD;
+  if (!adminPassword) return;
+
+  const existing = db.prepare("SELECT id FROM users WHERE username = 'admin'").get();
+  if (existing) return;
+
+  const passwordHash = hashPassword(adminPassword);
+  db.prepare(`
+    INSERT INTO users (id, workspace_id, username, password_hash, role, is_active)
+    VALUES (?, ?, 'admin', ?, 'admin', 1)
+  `).run(uuidv4(), workspaceId, passwordHash);
+  console.log('Seeded admin user from FOUNDRY_ADMIN_PASSWORD.');
 }
 
 export default getDb;

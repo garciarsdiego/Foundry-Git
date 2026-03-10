@@ -268,3 +268,30 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- Users: multi-user accounts for workspace access
+CREATE TABLE IF NOT EXISTS users (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT REFERENCES workspaces(id) ON DELETE CASCADE,
+  username TEXT NOT NULL UNIQUE,
+  email TEXT,
+  password_hash TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'member' CHECK(role IN ('admin', 'member', 'viewer')),
+  is_active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Webhook configs: GitHub event-driven flow triggers
+CREATE TABLE IF NOT EXISTS webhook_configs (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  flow_id TEXT REFERENCES flows(id) ON DELETE SET NULL,
+  secret TEXT,
+  events_json TEXT NOT NULL DEFAULT '["push"]',
+  project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+  is_enabled INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);

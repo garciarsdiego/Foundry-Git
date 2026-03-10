@@ -298,7 +298,12 @@ const OPENAI_COMPAT_BASE_URLS = {
   nvidia: 'https://integrate.api.nvidia.com',
   kimi: 'https://api.moonshot.cn',
   minimax: 'https://api.minimax.chat',
-  glm: 'https://open.bigmodel.cn/api/paas',
+  glm: 'https://open.bigmodel.cn/api/paas/v4',
+};
+
+// For providers whose base URL already includes the API version, use a shorter path.
+const OPENAI_COMPAT_CHAT_PATHS = {
+  glm: '/chat/completions',
 };
 
 const OPENAI_COMPAT_DEFAULT_MODELS = {
@@ -313,6 +318,7 @@ async function callOpenAICompatible(agent, providerConfig, history, apiKey) {
   const providerType = providerConfig.provider_type;
   const model = providerConfig.model || OPENAI_COMPAT_DEFAULT_MODELS[providerType] || providerType;
   const baseUrl = providerConfig.base_url || OPENAI_COMPAT_BASE_URLS[providerType] || '';
+  const chatPath = OPENAI_COMPAT_CHAT_PATHS[providerType] || '/v1/chat/completions';
 
   const messages = [];
   if (agent?.system_prompt) messages.push({ role: 'system', content: agent.system_prompt });
@@ -320,7 +326,7 @@ async function callOpenAICompatible(agent, providerConfig, history, apiKey) {
     messages.push({ role: h.role === 'assistant' ? 'assistant' : 'user', content: h.content });
   }
 
-  const response = await fetch(`${baseUrl}/v1/chat/completions`, {
+  const response = await fetch(`${baseUrl}${chatPath}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

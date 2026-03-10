@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   Workflow, Plus, Trash2, ArrowLeft, Play, Loader, Bot,
@@ -130,6 +130,105 @@ function RunFlowModal({ flow, cards, onClose, onRun }) {
   );
 }
 
+/**
+ * Drag-and-drop step list. Uses the HTML5 drag-and-drop API.
+ * Calls onReorder(newOrderedSteps) when a drop completes.
+ */
+function DraggableStepList({ steps, onReorder, onDelete }) {
+  const dragIndex = useRef(null);
+  const [dragOverIndex, setDragOverIndex] = useState(null);
+
+  function handleDragStart(e, idx) {
+    dragIndex.current = idx;
+    e.dataTransfer.effectAllowed = 'move';
+  }
+
+  function handleDragOver(e, idx) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverIndex(idx);
+  }
+
+  function handleDrop(e, idx) {
+    e.preventDefault();
+    if (dragIndex.current === null || dragIndex.current === idx) {
+      setDragOverIndex(null);
+      return;
+    }
+    const reordered = [...steps];
+    const [moved] = reordered.splice(dragIndex.current, 1);
+    reordered.splice(idx, 0, moved);
+    dragIndex.current = null;
+    setDragOverIndex(null);
+    onReorder(reordered);
+  }
+
+  function handleDragEnd() {
+    dragIndex.current = null;
+    setDragOverIndex(null);
+  }
+
+  return (
+    <div className="space-y-3">
+      {steps.map((step, idx) => {
+        const Icon = STEP_TYPE_ICONS[step.step_type] || Bot;
+        const isDragOver = dragOverIndex === idx;
+        return (
+          <React.Fragment key={step.id}>
+            <div
+              draggable
+              onDragStart={e => handleDragStart(e, idx)}
+              onDragOver={e => handleDragOver(e, idx)}
+              onDrop={e => handleDrop(e, idx)}
+              onDragEnd={handleDragEnd}
+              className={`bg-[#16181c] border rounded-xl p-4 group hover:border-blue-500/30 transition-colors cursor-grab active:cursor-grabbing ${
+                isDragOver ? 'border-blue-500/60 bg-blue-500/5' : 'border-[#2a2d35]'
+              }`}
+            >
+              <div className="flex items-start gap-3">
+                <div className="flex items-center gap-2">
+                  <GripVertical size={14} className="text-gray-600 group-hover:text-gray-400 transition-colors flex-shrink-0 mt-1" title="Drag to reorder" />
+                  <div className="w-8 h-8 bg-blue-600/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <Icon size={15} className="text-blue-400" />
+                  </div>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-xs font-medium text-gray-500">Step {idx + 1}</span>
+                    <span className="text-xs text-gray-600">·</span>
+                    <span className="text-xs text-gray-500">{STEP_TYPE_LABELS[step.step_type]}</span>
+                  </div>
+                  <p className="font-medium text-white text-sm">{step.name}</p>
+                  {step.agent_name && (
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      <Bot size={10} className="inline mr-1" />
+                      {step.agent_name}
+                    </p>
+                  )}
+                  {!step.agent_id && step.step_type !== 'condition' && (
+                    <p className="text-xs text-yellow-500/70 mt-0.5">No agent assigned</p>
+                  )}
+                </div>
+                <button
+                  onClick={() => onDelete(step.id)}
+                  className="p-1.5 text-gray-600 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                >
+                  <Trash2 size={13} />
+                </button>
+              </div>
+            </div>
+            {idx < steps.length - 1 && (
+              <div className="flex justify-center">
+                <ChevronRight size={16} className="text-gray-600 rotate-90" />
+              </div>
+            )}
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function FlowDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -144,6 +243,7 @@ export default function FlowDetailPage() {
   const [editingName, setEditingName] = useState(false);
   const [nameValue, setNameValue] = useState('');
   const [saving, setSaving] = useState(false);
+  const [reordering, setReordering] = useState(false);
 
   async function load() {
     try {
@@ -202,6 +302,23 @@ export default function FlowDetailPage() {
       setFlow(updated);
     } catch (err) {
       console.error(err);
+    }
+  }
+
+  async function handleReorder(reorderedSteps) {
+    // Optimistic update
+    setSteps(reorderedSteps);
+    setReordering(true);
+    try {
+      await api.put(`/flows/${id}/steps/reorder`, {
+        step_ids: reorderedSteps.map(s => s.id),
+      });
+    } catch (err) {
+      console.error('Reorder failed:', err);
+      // Reload to restore correct order
+      load();
+    } finally {
+      setReordering(false);
     }
   }
 
@@ -284,7 +401,10 @@ export default function FlowDetailPage() {
         {/* Steps */}
         <div className="lg:col-span-2">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-semibold text-gray-300 uppercase tracking-wider">Steps ({steps.length})</h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-semibold text-gray-300 uppercase tracking-wider">Steps ({steps.length})</h2>
+              {reordering && <Loader size={12} className="animate-spin text-blue-400" />}
+            </div>
             <button
               onClick={() => setShowAddStep(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-blue-400 hover:text-blue-300 border border-blue-500/30 hover:border-blue-500/60 rounded-lg transition-colors"
@@ -306,50 +426,13 @@ export default function FlowDetailPage() {
               </button>
             </div>
           ) : (
-            <div className="space-y-3">
-              {steps.map((step, idx) => {
-                const Icon = STEP_TYPE_ICONS[step.step_type] || Bot;
-                return (
-                  <React.Fragment key={step.id}>
-                    <div className="bg-[#16181c] border border-[#2a2d35] rounded-xl p-4 group hover:border-blue-500/30 transition-colors">
-                      <div className="flex items-start gap-3">
-                        <div className="w-8 h-8 bg-blue-600/20 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
-                          <Icon size={15} className="text-blue-400" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="text-xs font-medium text-gray-500">Step {idx + 1}</span>
-                            <span className="text-xs text-gray-600">·</span>
-                            <span className="text-xs text-gray-500">{STEP_TYPE_LABELS[step.step_type]}</span>
-                          </div>
-                          <p className="font-medium text-white text-sm">{step.name}</p>
-                          {step.agent_name && (
-                            <p className="text-xs text-gray-500 mt-0.5">
-                              <Bot size={10} className="inline mr-1" />
-                              {step.agent_name}
-                            </p>
-                          )}
-                          {!step.agent_id && step.step_type !== 'condition' && (
-                            <p className="text-xs text-yellow-500/70 mt-0.5">No agent assigned</p>
-                          )}
-                        </div>
-                        <button
-                          onClick={() => deleteStep(step.id)}
-                          className="p-1.5 text-gray-600 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                    </div>
-                    {idx < steps.length - 1 && (
-                      <div className="flex justify-center">
-                        <ChevronRight size={16} className="text-gray-600 rotate-90" />
-                      </div>
-                    )}
-                  </React.Fragment>
-                );
-              })}
-            </div>
+            <>
+              <p className="text-xs text-gray-600 mb-3 flex items-center gap-1.5">
+                <GripVertical size={11} />
+                Drag steps to reorder them
+              </p>
+              <DraggableStepList steps={steps} onReorder={handleReorder} onDelete={deleteStep} />
+            </>
           )}
         </div>
 
