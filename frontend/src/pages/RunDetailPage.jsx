@@ -61,12 +61,47 @@ export default function RunDetailPage() {
 
   useEffect(() => { load(); }, [runId]);
 
+  // SSE streaming for live run updates
   useEffect(() => {
-    if (run?.status === 'running' || run?.status === 'queued') {
-      const interval = setInterval(() => load(true), 2000);
-      return () => clearInterval(interval);
+    if (!runId) return;
+    const TERMINAL = ['success', 'failed', 'cancelled'];
+
+    const token = localStorage.getItem('foundry_token');
+    const url = `/api/runs/${runId}/stream`;
+
+    // Use EventSource via fetch fallback since EventSource doesn't support auth headers
+    let es;
+    try {
+      es = new EventSource(url);
+    } catch {
+      return;
     }
-  }, [run?.status]);
+
+    es.onmessage = (e) => {
+      try {
+        const payload = JSON.parse(e.data);
+        if (payload.type === 'run') {
+          setRun(prev => prev ? { ...payload.run, events: prev.events || [] } : payload.run);
+          setLoading(false);
+        } else if (payload.type === 'event') {
+          setRun(prev => {
+            if (!prev) return prev;
+            const exists = prev.events?.some(ev => ev.id === payload.event.id);
+            if (exists) return prev;
+            return { ...prev, events: [...(prev.events || []), payload.event] };
+          });
+        } else if (payload.type === 'done') {
+          es.close();
+        }
+      } catch {}
+    };
+
+    es.onerror = () => {
+      es.close();
+    };
+
+    return () => es.close();
+  }, [runId]);
 
   useEffect(() => {
     if (eventsEndRef.current) {

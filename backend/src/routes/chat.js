@@ -83,6 +83,14 @@ router.post('/', async (req, res) => {
       const result = await callAnthropic(agent, providerConfig, history, apiKey);
       assistantContent = result.content;
       responseMetadata = { provider: 'anthropic', model: result.model, usage: result.usage };
+    } else if (apiKey && providerConfig?.provider_type === 'google') {
+      const result = await callGoogle(agent, providerConfig, history, apiKey);
+      assistantContent = result.content;
+      responseMetadata = { provider: 'google', model: result.model, usage: result.usage };
+    } else if (apiKey && providerConfig?.provider_type === 'openrouter') {
+      const result = await callOpenRouter(agent, providerConfig, history, apiKey);
+      assistantContent = result.content;
+      responseMetadata = { provider: 'openrouter', model: result.model, usage: result.usage };
     } else {
       // Simulated response when no API key is configured
       assistantContent = generateSimulatedResponse(message, agent);
@@ -192,7 +200,7 @@ function generateSimulatedResponse(message, agent) {
   const lowerMsg = message.toLowerCase();
 
   if (lowerMsg.includes('help') || lowerMsg.includes('what can you do')) {
-    return `Hi! I'm ${agentName}. I can help you with coding tasks, answer questions about your project, and execute tasks on your Kanban board. To connect me to a real AI provider, configure a provider (OpenAI, Anthropic, etc.) and assign it to this agent with an API key environment variable set.`;
+    return `Hi! I'm ${agentName}. I can help you with coding tasks, answer questions about your project, and execute tasks on your Kanban board. To connect me to a real AI provider, configure a provider (OpenAI, Anthropic, Google, OpenRouter, etc.) and assign it to this agent with an API key environment variable set.`;
   }
   if (lowerMsg.includes('hello') || lowerMsg.includes('hi')) {
     return `Hello! I'm ${agentName}, ready to assist with your project. How can I help you today?`;
@@ -201,7 +209,78 @@ function generateSimulatedResponse(message, agent) {
     return `I can work on tasks from your Kanban board. Navigate to a project board, select a card, and use "Create Run" to assign me to execute it. I'll track progress in the Run queue.`;
   }
 
-  return `I received your message: "${message}". To enable real AI responses, configure an AI provider (OpenAI, Anthropic, etc.) in the Providers section and assign it to this agent. Currently running in simulation mode.`;
+  return `I received your message: "${message}". To enable real AI responses, configure an AI provider (OpenAI, Anthropic, Google, OpenRouter, etc.) in the Providers section and assign it to this agent. Currently running in simulation mode.`;
+}
+
+async function callGoogle(agent, providerConfig, history, apiKey) {
+  const model = providerConfig.model || 'gemini-1.5-flash';
+  const baseUrl = providerConfig.base_url || 'https://generativelanguage.googleapis.com';
+
+  // Build Gemini contents
+  const contents = history.map(h => ({
+    role: h.role === 'assistant' ? 'model' : 'user',
+    parts: [{ text: h.content }],
+  }));
+
+  const body = {
+    contents,
+    generationConfig: { maxOutputTokens: 1024 },
+  };
+  if (agent?.system_prompt) {
+    body.systemInstruction = { parts: [{ text: agent.system_prompt }] };
+  }
+
+  const response = await fetch(
+    `${baseUrl}/v1beta/models/${model}:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }
+  );
+
+  if (!response.ok) {
+    const errBody = await response.text();
+    throw new Error(`Google API error ${response.status}: ${errBody}`);
+  }
+
+  const data = await response.json();
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  return { content: text, model, usage: data.usageMetadata };
+}
+
+async function callOpenRouter(agent, providerConfig, history, apiKey) {
+  const model = providerConfig.model || 'openai/gpt-4o-mini';
+  const baseUrl = providerConfig.base_url || 'https://openrouter.ai';
+
+  const messages = [];
+  if (agent?.system_prompt) messages.push({ role: 'system', content: agent.system_prompt });
+  for (const h of history) {
+    messages.push({ role: h.role === 'assistant' ? 'assistant' : 'user', content: h.content });
+  }
+
+  const response = await fetch(`${baseUrl}/api/v1/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+      'HTTP-Referer': process.env.OPENROUTER_SITE_URL || 'https://foundry.app',
+      'X-Title': process.env.OPENROUTER_SITE_NAME || 'Foundry',
+    },
+    body: JSON.stringify({ model, messages, max_tokens: 1024 }),
+  });
+
+  if (!response.ok) {
+    const errBody = await response.text();
+    throw new Error(`OpenRouter API error ${response.status}: ${errBody}`);
+  }
+
+  const data = await response.json();
+  return {
+    content: data.choices?.[0]?.message?.content || '',
+    model,
+    usage: data.usage,
+  };
 }
 
 export default router;

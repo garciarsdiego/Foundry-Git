@@ -3,8 +3,9 @@ import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, FolderKanban, Bot, Users, Cpu, Cloud,
   PlaySquare, Settings, MessageSquare, Workflow, ChevronLeft,
-  ChevronRight, Zap, Server
+  ChevronRight, Zap, Server, LogOut
 } from 'lucide-react';
+import { setToken } from './api.js';
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard', exact: true },
@@ -23,6 +24,12 @@ const navItems = [
 
 export default function Shell() {
   const [collapsed, setCollapsed] = useState(false);
+  const navigate = useNavigate();
+
+  function handleLogout() {
+    setToken(null);
+    navigate('/login');
+  }
 
   return (
     <div className="flex h-screen bg-[#0d0d0f] text-gray-100 overflow-hidden">
@@ -81,6 +88,13 @@ export default function Shell() {
             <span className="text-sm text-gray-400">Default Workspace</span>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              onClick={handleLogout}
+              title="Sign out"
+              className="p-1.5 text-gray-500 hover:text-gray-300 hover:bg-white/5 rounded-lg transition-colors"
+            >
+              <LogOut size={15} />
+            </button>
             <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-xs font-bold text-white">
               F
             </div>

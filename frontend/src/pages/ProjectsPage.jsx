@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, FolderKanban, Github, Loader, Pencil, Trash2 } from 'lucide-react';
+import { Plus, FolderKanban, Github, Loader, Pencil, Trash2, Search } from 'lucide-react';
 import api from '../components/api.js';
 import Modal from '../components/Modal.jsx';
 import ConfirmModal from '../components/ConfirmModal.jsx';
@@ -87,6 +87,7 @@ export default function ProjectsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [search, setSearch] = useState('');
   const workspaceId = 'default';
 
   async function load() {
@@ -133,9 +134,20 @@ export default function ProjectsPage() {
           <h1 className="text-2xl font-bold text-white">Projects</h1>
           <p className="text-gray-400 mt-1">Manage your AI-powered development projects</p>
         </div>
-        <button onClick={() => setModalOpen(true)} className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm transition-colors">
-          <Plus size={16} /> New Project
-        </button>
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search projects…"
+              className="pl-9 pr-3 py-2 bg-[#16181c] border border-[#2a2d35] rounded-lg text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500 w-48"
+            />
+          </div>
+          <button onClick={() => setModalOpen(true)} className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm transition-colors">
+            <Plus size={16} /> New Project
+          </button>
+        </div>
       </div>
 
       {loading ? (
@@ -151,7 +163,7 @@ export default function ProjectsPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {projects.map(p => (
+          {projects.filter(p => !search || p.name.toLowerCase().includes(search.toLowerCase()) || (p.description || '').toLowerCase().includes(search.toLowerCase())).map(p => (
             <div key={p.id} className="bg-[#16181c] border border-[#2a2d35] rounded-xl p-5 hover:border-[#3a3d45] transition-colors group">
               <div className="flex items-start justify-between mb-3">
                 <div className="w-9 h-9 rounded-lg bg-blue-600/20 flex items-center justify-center">

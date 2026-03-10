@@ -1,8 +1,23 @@
 import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
+import { z } from 'zod';
 import { getDb } from '../db/index.js';
 
 const router = Router();
+
+const PROVIDER_TYPES = ['openai', 'anthropic', 'google', 'openrouter', 'minimax', 'glm'];
+
+const ProviderSchema = z.object({
+  workspace_id: z.string().min(1),
+  name: z.string().min(1).max(100),
+  provider_type: z.enum(PROVIDER_TYPES),
+  base_url: z.string().url().optional().nullable().or(z.literal('')).transform(v => v || null),
+  api_key_env_var: z.string().max(100).optional().nullable(),
+  model: z.string().max(100).optional().nullable(),
+  is_default: z.boolean().optional().default(false),
+});
+
+const ProviderUpdateSchema = ProviderSchema.partial().omit({ workspace_id: true });
 
 router.get('/', (req, res) => {
   try {
@@ -36,10 +51,11 @@ router.get('/:id', (req, res) => {
 router.post('/', (req, res) => {
   try {
     const db = getDb();
-    const { workspace_id, name, provider_type, base_url, api_key_env_var, model, is_default } = req.body;
-    if (!workspace_id || !name || !provider_type) {
-      return res.status(400).json({ error: 'workspace_id, name, and provider_type are required' });
+    const parsed = ProviderSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.errors.map(e => e.message).join('; ') });
     }
+    const { workspace_id, name, provider_type, base_url, api_key_env_var, model, is_default } = parsed.data;
     const id = uuidv4();
     if (is_default) {
       db.prepare(`UPDATE provider_configs SET is_default = 0 WHERE workspace_id = ?`).run(workspace_id);
@@ -60,7 +76,11 @@ router.put('/:id', (req, res) => {
     const db = getDb();
     const existing = db.prepare('SELECT * FROM provider_configs WHERE id = ?').get(req.params.id);
     if (!existing) return res.status(404).json({ error: 'Provider config not found' });
-    const { name, provider_type, base_url, api_key_env_var, model, is_default } = req.body;
+    const parsed = ProviderUpdateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.errors.map(e => e.message).join('; ') });
+    }
+    const { name, provider_type, base_url, api_key_env_var, model, is_default } = parsed.data;
     if (is_default) {
       db.prepare(`UPDATE provider_configs SET is_default = 0 WHERE workspace_id = ?`).run(existing.workspace_id);
     }
@@ -70,9 +90,9 @@ router.put('/:id', (req, res) => {
     `).run(
       name ?? existing.name,
       provider_type ?? existing.provider_type,
-      base_url ?? existing.base_url,
-      api_key_env_var ?? existing.api_key_env_var,
-      model ?? existing.model,
+      base_url !== undefined ? (base_url || null) : existing.base_url,
+      api_key_env_var !== undefined ? (api_key_env_var || null) : existing.api_key_env_var,
+      model !== undefined ? (model || null) : existing.model,
       is_default !== undefined ? (is_default ? 1 : 0) : existing.is_default,
       req.params.id
     );

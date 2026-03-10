@@ -24,4 +24,21 @@ router.get('/', (req, res) => {
   }
 });
 
+router.put('/workspace', (req, res) => {
+  try {
+    const db = getDb();
+    const workspace = db.prepare('SELECT * FROM workspaces LIMIT 1').get();
+    if (!workspace) return res.status(404).json({ error: 'No workspace found' });
+
+    const { name } = req.body;
+    if (!name || !name.trim()) return res.status(400).json({ error: 'Name is required' });
+
+    db.prepare(`UPDATE workspaces SET name = ?, updated_at = datetime('now') WHERE id = ?`).run(name.trim(), workspace.id);
+    const updated = db.prepare('SELECT * FROM workspaces WHERE id = ?').get(workspace.id);
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;

@@ -69,6 +69,76 @@ router.post('/:id/cancel', (req, res) => {
   }
 });
 
+// SSE: stream run events in real-time
+router.get('/:id/stream', (req, res) => {
+  const db = getDb();
+  const run = db.prepare('SELECT * FROM runs WHERE id = ?').get(req.params.id);
+  if (!run) {
+    res.status(404).json({ error: 'Run not found' });
+    return;
+  }
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  let lastEventId = 0;
+  const TERMINAL = new Set(['success', 'failed', 'cancelled']);
+
+  function send(data) {
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  }
+
+  // Send current run state immediately
+  send({ type: 'run', run });
+
+  // Send all existing events (use rowid for cursor tracking)
+  const existing = db.prepare('SELECT rowid, * FROM run_events WHERE run_id = ? ORDER BY rowid ASC').all(req.params.id);
+  for (const evt of existing) {
+    send({ type: 'event', event: evt });
+    if (evt.rowid > lastEventId) lastEventId = evt.rowid;
+  }
+
+  if (TERMINAL.has(run.status)) {
+    send({ type: 'done', status: run.status });
+    res.end();
+    return;
+  }
+
+  // Poll for new events every 600ms
+  const interval = setInterval(() => {
+    try {
+      const updatedRun = db.prepare('SELECT * FROM runs WHERE id = ?').get(req.params.id);
+      if (!updatedRun) { clearInterval(interval); res.end(); return; }
+
+      const newEvents = db.prepare(
+        'SELECT rowid, * FROM run_events WHERE run_id = ? AND rowid > ? ORDER BY rowid ASC'
+      ).all(req.params.id, lastEventId);
+
+      for (const evt of newEvents) {
+        send({ type: 'event', event: evt });
+        lastEventId = evt.rowid;
+      }
+
+      if (updatedRun.status !== run.status || TERMINAL.has(updatedRun.status)) {
+        send({ type: 'run', run: updatedRun });
+      }
+
+      if (TERMINAL.has(updatedRun.status)) {
+        send({ type: 'done', status: updatedRun.status });
+        clearInterval(interval);
+        res.end();
+      }
+    } catch {
+      clearInterval(interval);
+      res.end();
+    }
+  }, 600);
+
+  req.on('close', () => clearInterval(interval));
+});
+
 // Cost and token usage stats
 router.get('/stats/costs', (req, res) => {
   try {
