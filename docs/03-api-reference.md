@@ -1593,4 +1593,6 @@ X-GitHub-Event: push
 
 ---
 
+> **Route coverage**: This document covers all 19 route groups mounted in the Express application: auth, workspaces, projects, boards, cards, agents, teams, providers, runtimes, skills, mcp, runs, chat, flows, github, webhooks, companies, settings, and execution.
+
 *See also*: [Architecture Overview](01-architecture-overview.md), [Data Model](02-data-model.md), [Authentication & RBAC](04-auth-and-rbac.md), [API Client Guide](27-api-client-guide.md)
