@@ -5,50 +5,116 @@ import Modal from '../components/Modal.jsx';
 import ConfirmModal from '../components/ConfirmModal.jsx';
 
 const PROVIDER_TYPES = [
-  { value: 'openai', label: 'OpenAI', desc: 'GPT-4o, o4, o3, and more' },
-  { value: 'anthropic', label: 'Anthropic', desc: 'Claude 3.5 / 4 Sonnet, Opus, Haiku' },
-  { value: 'google', label: 'Google', desc: 'Gemini 2.5 Pro, Flash, and more' },
-  { value: 'openrouter', label: 'OpenRouter', desc: 'Unified access to 100+ models' },
-  { value: 'minimax', label: 'MiniMax', desc: 'MiniMax-Text-01, abab coding plan' },
-  { value: 'glm', label: 'GLM / Z.ai', desc: 'GLM-4, GLM-4-Plus — Z.ai coding plan' },
-  { value: 'nvidia', label: 'NVIDIA NIM', desc: 'Llama, Nemotron, Mixtral on NVIDIA' },
-  { value: 'groq', label: 'Groq', desc: 'Llama 3, Mixtral — ultra-fast inference' },
-  { value: 'kimi', label: 'Kimi (Moonshot)', desc: 'moonshot-v1-8k/32k/128k coding plan' },
+  { value: 'openai', label: 'OpenAI', desc: 'GPT-4o, o4-mini, o3, gpt-5 and more' },
+  { value: 'anthropic', label: 'Anthropic', desc: 'claude-opus-4-6 (1M), claude-sonnet-4-6 (1M), claude-haiku-4-5' },
+  { value: 'google', label: 'Google', desc: 'gemini-3.1-pro-preview, gemini-2.5-pro, Flash and more' },
+  { value: 'openrouter', label: 'OpenRouter', desc: 'Unified access to 500+ models' },
+  { value: 'minimax', label: 'MiniMax', desc: 'minimax-m2.5, m2.1 — MiniMax Coding Plan' },
+  { value: 'glm', label: 'GLM / Z.ai', desc: 'GLM-5, GLM-4.7, GLM-4.5 — Z.AI Coding Plan' },
+  { value: 'nvidia', label: 'NVIDIA NIM', desc: 'Nemotron, Meta Llama 4, Mistral, DeepSeek, Qwen & more' },
+  { value: 'groq', label: 'Groq', desc: 'Llama 4, GPT-OSS, Kimi, Qwen — ultra-fast inference' },
+  { value: 'kimi', label: 'Kimi (Moonshot)', desc: 'kimi-k2.5, kimi-k2-instruct — Kimi Coding Plan' },
 ];
 
 /** Suggested models per provider shown as datalist options. */
 const PROVIDER_MODELS = {
   openai: [
     'gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-4', 'gpt-3.5-turbo',
-    'o4', 'o4-mini', 'o3', 'o3-mini',
+    'o4-mini', 'o4-mini-high', 'o3', 'o3-mini',
+    'codex-mini-latest', 'gpt-5', 'gpt-5-codex', 'gpt-5-nano',
+    'gpt-5.1', 'gpt-5.1-codex', 'gpt-5.1-codex-mini', 'gpt-5.2', 'gpt-5.3-codex',
+    'gpt-5.4', 'gpt-5.4-pro', 'gpt-5.4-codex',
   ],
   anthropic: [
-    'claude-opus-4-5', 'claude-sonnet-4-5', 'claude-haiku-4-5',
+    'claude-opus-4-6', 'claude-sonnet-4-6', 'claude-haiku-4-5',
+    'claude-opus-4-5', 'claude-sonnet-4-5',
     'claude-3-5-sonnet-20241022', 'claude-3-opus-20240229', 'claude-3-haiku-20240307',
   ],
   google: [
-    'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-1.0-pro',
+    'gemini-3.1-pro-preview', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite-preview',
+    'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite',
+    'gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-1.0-pro',
   ],
   openrouter: [
-    'openai/gpt-4o', 'openai/gpt-4o-mini', 'anthropic/claude-3.5-sonnet',
-    'google/gemini-pro-1.5', 'meta-llama/llama-3.1-8b-instruct', 'mistralai/mixtral-8x7b-instruct',
+    'anthropic/claude-opus-4-6', 'anthropic/claude-sonnet-4-6',
+    'openai/gpt-5.4-pro', 'openai/gpt-5.4', 'openai/gpt-4o', 'openai/gpt-4o-mini',
+    'google/gemini-3.1-pro-preview', 'google/gemini-2.5-pro',
+    'meta-llama/llama-4-maverick-17b-128e-instruct', 'meta-llama/llama-4-scout-17b-16e-instruct',
+    'moonshotai/kimi-k2.5', 'deepseek/deepseek-r1', 'qwen/qwen3-coder-480b-a35b',
+    'mistralai/mistral-large-3', 'mistralai/mixtral-8x7b-instruct',
   ],
   minimax: [
+    'minimax-m2.5', 'minimax-m2.5-highspeed', 'minimax-m2.1', 'minimax-m2',
     'MiniMax-Text-01', 'abab6.5s-chat', 'abab5.5-chat',
   ],
   glm: [
-    'glm-4', 'glm-4-plus', 'glm-4-long', 'glm-4v', 'glm-3-turbo',
+    'glm-5', 'glm-4.7', 'glm-4.6', 'glm-4.5', 'glm-4.5-air', 'glm-4.7-flash',
+    'glm-4', 'glm-4-plus', 'glm-4-long', 'glm-3-turbo',
   ],
   nvidia: [
-    'meta/llama-3.1-70b-instruct', 'meta/llama-3.1-8b-instruct',
-    'nvidia/llama-3.1-nemotron-70b-instruct', 'mistralai/mixtral-8x22b-instruct-v0.1',
-    'mistralai/mistral-large-2-instruct', 'microsoft/phi-3-mini-128k-instruct',
+    // NVIDIA Nemotron
+    'nvidia/llama-3.1-nemotron-ultra-253b-v1',
+    'nvidia/llama-3.3-nemotron-super-49b-v1',
+    'nvidia/nemotron-3-nano-30b-a3b',
+    'nvidia/llama-3.1-nemotron-70b-instruct',
+    'nvidia/llama-3.1-nemotron-nano-8b-v1',
+    // Meta Llama
+    'meta/llama-4-maverick-17b-128e-instruct',
+    'meta/llama-4-scout-17b-16e-instruct',
+    'meta/llama-3.3-70b-instruct',
+    'meta/llama-3.1-70b-instruct',
+    'meta/llama-3.1-8b-instruct',
+    // Mistral AI
+    'mistralai/mistral-large-3',
+    'mistralai/devstral-2-123b-instruct-2512',
+    'mistralai/mixtral-8x7b-instruct',
+    'mistralai/mistral-7b-instruct-v0.3',
+    'mistralai/mistral-nemo-12b-instruct',
+    // DeepSeek
+    'deepseek-ai/deepseek-v3.2',
+    'deepseek-ai/deepseek-r1',
+    'deepseek-ai/deepseek-r1-distill-qwen-32b',
+    'deepseek-ai/deepseek-r1-distill-qwen-14b',
+    'deepseek-ai/deepseek-r1-distill-qwen-7b',
+    'deepseek-ai/deepseek-r1-distill-llama-8b',
+    // Qwen (Alibaba)
+    'qwen/qwen3.5-397b-a17b',
+    'qwen/qwen3.5-122b-a10b',
+    'qwen/qwen3-coder-480b-a35b',
+    'qwen/qwen3-next-instruct',
+    'qwen/qwen2.5-coder-32b-instruct',
+    // Other providers on NVIDIA NIM
+    'z-ai/glm5', 'z-ai/glm4.7',
+    'minimaxai/minimax-m2.5', 'minimaxai/minimax-m2.1',
+    'moonshotai/kimi-k2.5', 'moonshotai/kimi-k2-thinking',
+    'stepfun-ai/step-3.5-flash',
+    'microsoft/phi-4', 'microsoft/phi-4-mini-instruct',
+    'google/gemma-3-27b-it', 'google/gemma-3-12b-it',
   ],
   groq: [
-    'llama-3.3-70b-versatile', 'llama-3.1-70b-versatile', 'llama-3.1-8b-instant',
-    'mixtral-8x7b-32768', 'gemma2-9b-it', 'gemma-7b-it',
+    // OpenAI on Groq
+    'openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'openai/gpt-oss-safeguard-20b',
+    // Kimi on Groq
+    'moonshotai/kimi-k2-instruct-0905',
+    // Meta Llama 4
+    'meta-llama/llama-4-maverick-17b-128e-instruct',
+    'meta-llama/llama-4-scout-17b-16e-instruct',
+    // Qwen
+    'qwen/qwen3-32b', 'qwen-qwq-32b',
+    // Llama 3
+    'llama-3.3-70b-versatile', 'llama-3.1-8b-instant',
+    'llama3-70b-8192', 'llama3-8b-8192',
+    // DeepSeek
+    'deepseek-r1-distill-llama-70b',
+    // Google
+    'gemma2-9b-it',
+    // Agentic
+    'compound-beta',
+    // ASR
+    'whisper-large-v3', 'whisper-large-v3-turbo', 'distil-whisper-large-v3-en',
   ],
   kimi: [
+    'kimi-k2.5', 'kimi-k2-instruct',
     'moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k',
   ],
 };
@@ -70,15 +136,15 @@ function ProviderForm({ initial = {}, onSubmit, onCancel }) {
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
 
   const DEFAULTS = {
-    openai:    { model: 'gpt-4o',                     env: 'OPENAI_API_KEY' },
-    anthropic: { model: 'claude-3-5-sonnet-20241022', env: 'ANTHROPIC_API_KEY' },
-    google:    { model: 'gemini-2.5-pro',              env: 'GOOGLE_API_KEY' },
-    openrouter:{ model: 'openai/gpt-4o',              env: 'OPENROUTER_API_KEY' },
-    minimax:   { model: 'MiniMax-Text-01',             env: 'MINIMAX_API_KEY' },
-    glm:       { model: 'glm-4',                       env: 'GLM_API_KEY' },
-    nvidia:    { model: 'meta/llama-3.1-70b-instruct', env: 'NVIDIA_API_KEY' },
-    groq:      { model: 'llama-3.3-70b-versatile',    env: 'GROQ_API_KEY' },
-    kimi:      { model: 'moonshot-v1-8k',              env: 'MOONSHOT_API_KEY' },
+    openai:    { model: 'gpt-4o',                              env: 'OPENAI_API_KEY' },
+    anthropic: { model: 'claude-sonnet-4-6',                   env: 'ANTHROPIC_API_KEY' },
+    google:    { model: 'gemini-3.1-pro-preview',              env: 'GOOGLE_API_KEY' },
+    openrouter:{ model: 'anthropic/claude-sonnet-4-6',         env: 'OPENROUTER_API_KEY' },
+    minimax:   { model: 'minimax-m2.5',                        env: 'MINIMAX_API_KEY' },
+    glm:       { model: 'glm-5',                               env: 'GLM_API_KEY' },
+    nvidia:    { model: 'nvidia/llama-3.1-nemotron-ultra-253b-v1', env: 'NVIDIA_API_KEY' },
+    groq:      { model: 'llama-3.3-70b-versatile',             env: 'GROQ_API_KEY' },
+    kimi:      { model: 'kimi-k2.5',                           env: 'MOONSHOT_API_KEY' },
   };
 
   function handleTypeChange(type) {
