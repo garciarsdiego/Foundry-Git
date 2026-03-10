@@ -6,6 +6,12 @@ import { dispatchFlowRun } from '../services/flowService.js';
 
 const router = Router();
 
+/** Strip the raw secret from a webhook config row; expose only a boolean secret_set flag. */
+function maskWebhook(w) {
+  const { secret, ...rest } = w;
+  return { ...rest, secret_set: !!secret };
+}
+
 // --- Webhook config CRUD (protected by auth middleware in index.js) ---
 
 // List webhook configs
@@ -25,7 +31,7 @@ router.get('/', (req, res) => {
       ${where}
       ORDER BY w.created_at DESC
     `).all(...params);
-    res.json(configs);
+    res.json(configs.map(maskWebhook));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -53,7 +59,7 @@ router.post('/', (req, res) => {
       is_enabled !== false ? 1 : 0
     );
     const config = db.prepare('SELECT * FROM webhook_configs WHERE id = ?').get(id);
-    res.status(201).json(config);
+    res.status(201).json(maskWebhook(config));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -81,7 +87,7 @@ router.put('/:id', (req, res) => {
       req.params.id
     );
     const updated = db.prepare('SELECT * FROM webhook_configs WHERE id = ?').get(req.params.id);
-    res.json(updated);
+    res.json(maskWebhook(updated));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

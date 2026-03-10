@@ -3,6 +3,11 @@ import { getDb } from '../db/index.js';
 
 const router = Router();
 
+function maskWebhook(w) {
+  const { secret, ...rest } = w;
+  return { ...rest, secret_set: !!secret };
+}
+
 router.get('/', (req, res) => {
   try {
     const db = getDb();
@@ -19,7 +24,7 @@ router.get('/', (req, res) => {
       providers,
       runtimes,
       github_connections: githubConnections,
-      webhooks,
+      webhooks: webhooks.map(maskWebhook),
     });
   } catch (err) {
     res.status(500).json({ error: err.message });

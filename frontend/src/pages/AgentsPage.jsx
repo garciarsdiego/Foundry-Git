@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Bot, Loader, Pencil, Trash2, Cpu, Cloud, Search, LayoutTemplate, Download, ChevronRight, Code2, Shield, Database, Microscope, Palette, Workflow, Globe } from 'lucide-react';
+import { Plus, Bot, Loader, Pencil, Trash2, Cpu, Cloud, Search, LayoutTemplate, Download, Brain, X, Star } from 'lucide-react';
 import api from '../components/api.js';
 import Modal from '../components/Modal.jsx';
 import ConfirmModal from '../components/ConfirmModal.jsx';
@@ -117,6 +117,179 @@ function AgentForm({ initial = {}, providers, runtimes, onSubmit, onCancel }) {
   );
 }
 
+const IMPORTANCE_LABELS = { 1: 'Low', 2: 'Normal', 3: 'Medium', 4: 'High', 5: 'Critical' };
+const IMPORTANCE_COLORS = { 1: 'text-gray-500', 2: 'text-gray-400', 3: 'text-blue-400', 4: 'text-yellow-400', 5: 'text-red-400' };
+
+function MemoryForm({ initial = {}, onSubmit, onCancel }) {
+  const [form, setForm] = useState({
+    memory_key: initial.memory_key || '',
+    content: initial.content || '',
+    importance: initial.importance ?? 2,
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!form.memory_key.trim()) return setError('Key is required');
+    if (!form.content.trim()) return setError('Content is required');
+    setSaving(true);
+    setError('');
+    try {
+      await onSubmit({ ...form, importance: Number(form.importance) });
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-3">
+      {error && <div className="text-red-400 text-sm bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{error}</div>}
+      <div>
+        <label className="block text-xs text-gray-400 mb-1">Key *</label>
+        <input value={form.memory_key} onChange={set('memory_key')} placeholder="e.g. preferred_language" className="w-full bg-[#0d0d0f] border border-[#2a2d35] rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500" />
+      </div>
+      <div>
+        <label className="block text-xs text-gray-400 mb-1">Content *</label>
+        <textarea value={form.content} onChange={set('content')} rows={3} placeholder="What the agent should remember…" className="w-full bg-[#0d0d0f] border border-[#2a2d35] rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 resize-none" />
+      </div>
+      <div>
+        <label className="block text-xs text-gray-400 mb-1">Importance</label>
+        <select value={form.importance} onChange={set('importance')} className="w-full bg-[#0d0d0f] border border-[#2a2d35] rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500">
+          {[1, 2, 3, 4, 5].map(v => <option key={v} value={v}>{v} — {IMPORTANCE_LABELS[v]}</option>)}
+        </select>
+      </div>
+      <div className="flex justify-end gap-3 pt-1">
+        <button type="button" onClick={onCancel} className="px-3 py-1.5 text-sm text-gray-400 hover:text-white">Cancel</button>
+        <button type="submit" disabled={saving} className="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-500 text-white rounded-lg disabled:opacity-50">
+          {saving ? 'Saving…' : initial.id ? 'Update' : 'Add Memory'}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function AgentMemoryPanel({ agent, onClose }) {
+  const [memories, setMemories] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [addOpen, setAddOpen] = useState(false);
+  const [editingMem, setEditingMem] = useState(null);
+  const [confirmDeleteMem, setConfirmDeleteMem] = useState(null);
+  const toast = useToast();
+
+  async function loadMemories() {
+    try {
+      const data = await api.get(`/agents/${agent.id}/memories`);
+      setMemories(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { loadMemories(); }, [agent.id]);
+
+  async function handleAdd(data) {
+    await api.post(`/agents/${agent.id}/memories`, data);
+    setAddOpen(false);
+    loadMemories();
+    toast('Memory saved', 'success');
+  }
+
+  async function handleEdit(data) {
+    await api.put(`/agents/${agent.id}/memories/${editingMem.id}`, data);
+    setEditingMem(null);
+    loadMemories();
+    toast('Memory updated', 'success');
+  }
+
+  async function handleDelete() {
+    await api.delete(`/agents/${agent.id}/memories/${confirmDeleteMem}`);
+    setConfirmDeleteMem(null);
+    loadMemories();
+    toast('Memory deleted', 'success');
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/50">
+      <div className="bg-[#16181c] border border-[#2a2d35] rounded-2xl w-full max-w-lg max-h-[80vh] flex flex-col shadow-2xl">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[#2a2d35]">
+          <div className="flex items-center gap-2">
+            <Brain size={16} className="text-purple-400" />
+            <span className="font-semibold text-white text-sm">{agent.name} — Memories</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setAddOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600/20 border border-blue-500/30 hover:bg-blue-600/30 text-blue-300 rounded-lg text-xs transition-colors">
+              <Plus size={12} /> Add
+            </button>
+            <button onClick={onClose} className="p-1.5 text-gray-500 hover:text-white hover:bg-white/5 rounded-lg transition-colors"><X size={15} /></button>
+          </div>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-2">
+          {loading ? (
+            <div className="flex items-center justify-center py-10 text-gray-500"><Loader size={16} className="animate-spin mr-2" /> Loading…</div>
+          ) : memories.length === 0 && !addOpen ? (
+            <div className="text-center py-10">
+              <Brain size={32} className="mx-auto mb-3 text-gray-600" />
+              <p className="text-sm text-gray-400">No memories yet</p>
+              <p className="text-xs text-gray-600 mt-1">Memories are injected into the agent's context during chat.</p>
+            </div>
+          ) : (
+            memories.map(mem => (
+              <div key={mem.id} className="bg-[#0d0d0f] border border-[#2a2d35] rounded-xl p-3 group">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-xs font-mono text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded">{mem.memory_key}</span>
+                      <span className={`text-xs flex items-center gap-1 ${IMPORTANCE_COLORS[mem.importance] || 'text-gray-500'}`}>
+                        <Star size={10} fill="currentColor" />{IMPORTANCE_LABELS[mem.importance] || mem.importance}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-300 leading-relaxed">{mem.content}</p>
+                  </div>
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                    <button onClick={() => setEditingMem(mem)} className="p-1.5 rounded text-gray-500 hover:text-white hover:bg-white/10"><Pencil size={12} /></button>
+                    <button onClick={() => setConfirmDeleteMem(mem.id)} className="p-1.5 rounded text-gray-500 hover:text-red-400 hover:bg-red-500/10"><Trash2 size={12} /></button>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+
+          {addOpen && (
+            <div className="bg-[#0d0d0f] border border-blue-500/30 rounded-xl p-4">
+              <p className="text-xs text-blue-400 font-medium mb-3">New Memory</p>
+              <MemoryForm onSubmit={handleAdd} onCancel={() => setAddOpen(false)} />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Edit modal */}
+      <Modal isOpen={!!editingMem} onClose={() => setEditingMem(null)} title="Edit Memory">
+        {editingMem && <MemoryForm initial={editingMem} onSubmit={handleEdit} onCancel={() => setEditingMem(null)} />}
+      </Modal>
+
+      <ConfirmModal
+        isOpen={!!confirmDeleteMem}
+        onClose={() => setConfirmDeleteMem(null)}
+        onConfirm={handleDelete}
+        title="Delete Memory"
+        message="Are you sure you want to delete this memory? This cannot be undone."
+        confirmLabel="Delete Memory"
+      />
+    </div>
+  );
+}
+
 export default function AgentsPage() {
   const [agents, setAgents] = useState([]);
   const [providers, setProviders] = useState([]);
@@ -131,6 +304,7 @@ export default function AgentsPage() {
   const [templates, setTemplates] = useState([]);
   const [templatesLoading, setTemplatesLoading] = useState(false);
   const [deployingId, setDeployingId] = useState(null);
+  const [memoryAgent, setMemoryAgent] = useState(null);
   const toast = useToast();
 
   async function load() {
@@ -273,6 +447,7 @@ export default function AgentsPage() {
                       {agent.execution_mode === 'runtime' ? <Cpu size={16} className="text-purple-400" /> : <Cloud size={16} className="text-blue-400" />}
                     </div>
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                       <button onClick={() => setMemoryAgent(agent)} className="p-1.5 rounded text-gray-500 hover:text-purple-400 hover:bg-purple-500/10" title="Memories"><Brain size={13} /></button>
                       <button onClick={() => setEditing(agent)} className="p-1.5 rounded text-gray-500 hover:text-white hover:bg-white/10"><Pencil size={13} /></button>
                       <button onClick={() => handleDelete(agent.id)} className="p-1.5 rounded text-gray-500 hover:text-red-400 hover:bg-red-500/10"><Trash2 size={13} /></button>
                     </div>
@@ -350,6 +525,7 @@ export default function AgentsPage() {
         message="Are you sure you want to delete this agent? This cannot be undone."
         confirmLabel="Delete Agent"
       />
+      {memoryAgent && <AgentMemoryPanel agent={memoryAgent} onClose={() => setMemoryAgent(null)} />}
     </div>
   );
 }
