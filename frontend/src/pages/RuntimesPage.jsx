@@ -8,50 +8,88 @@ const RUNTIME_TYPES = [
   {
     value: 'opencode',
     label: 'OpenCode',
-    description: 'Multi-provider agentic CLI. Orchestrates Claude, GPT, Gemini, Kimi & more.',
+    description: '75+ providers via Models.dev — Zen (pay-as-you-go) & Go ($10/mo) plans. Supports claude-opus-4-6 (1M), gpt-5.4-pro, gemini-3.1-pro, kimi-k2.5, glm-5, minimax-m2.5 and more.',
     invocation: 'opencode run "<prompt>"',
     install: 'https://opencode.ai/docs',
     badge: 'bg-blue-500/20 text-blue-400',
+    models: [
+      // Zen plan (pay-as-you-go)
+      'claude-opus-4-6', 'claude-opus-4-5', 'claude-opus-4-1',
+      'claude-sonnet-4-6', 'claude-sonnet-4-5', 'claude-sonnet-4',
+      'claude-haiku-4-5', 'claude-3-5-haiku',
+      'gemini-3.1-pro', 'gemini-3-pro', 'gemini-3-flash',
+      'gpt-5.4-pro', 'gpt-5.4', 'gpt-5.3-codex', 'gpt-5.3-codex-spark',
+      'gpt-5.2-codex', 'gpt-5.2',
+      'gpt-5.1-codex-max', 'gpt-5.1-codex', 'gpt-5.1-codex-mini', 'gpt-5.1',
+      'gpt-5-codex', 'gpt-5', 'gpt-5-nano',
+      'kimi-k2.5', 'glm-5', 'glm-4.7', 'glm-4.6',
+      'minimax-m2.5', 'minimax-m2.1',
+      // Go plan ($10/mo)
+      'minimax-m2.5-free', 'mimo-v2-flash-free', 'big-pickle',
+    ],
   },
   {
     value: 'claude-code',
     label: 'Claude Code',
-    description: "Anthropic's official agentic coding CLI.",
+    description: "Anthropic's official agentic coding CLI. Models: claude-opus-4-6 (1M ctx), claude-sonnet-4-6 (1M ctx), claude-haiku-4-5.",
     invocation: 'claude -p "<prompt>"',
     install: 'https://docs.anthropic.com/en/docs/claude-code',
     badge: 'bg-orange-500/20 text-orange-400',
+    models: [
+      'claude-opus-4-6', 'claude-sonnet-4-6', 'claude-haiku-4-5',
+    ],
   },
   {
     value: 'codex',
     label: 'Codex CLI',
-    description: "OpenAI's open-source coding agent CLI.",
+    description: "OpenAI's open-source coding agent CLI. Models: codex-mini-latest, o4-mini, o4-mini-high, o3, gpt-5.3-codex, gpt-5.4-codex, gpt-5.4, gpt-5.4-pro.",
     invocation: 'codex "<prompt>"',
     install: 'https://github.com/openai/codex',
     badge: 'bg-green-500/20 text-green-400',
+    models: [
+      'codex-mini-latest',
+      'o4-mini', 'o4-mini-high', 'o3',
+      'gpt-5.3-codex', 'gpt-5.4-codex', 'gpt-5.4', 'gpt-5.4-pro',
+    ],
   },
   {
     value: 'gemini-cli',
     label: 'Gemini CLI',
-    description: "Google's Gemini agentic coding CLI.",
+    description: "Google's Gemini agentic coding CLI. Models: gemini-3.1-pro-preview, gemini-3-flash-preview, gemini-3.1-flash-lite-preview, gemini-2.5-pro, gemini-2.5-flash, gemini-2.5-flash-lite.",
     invocation: 'gemini -p "<prompt>"',
     install: 'https://github.com/google-gemini/gemini-cli',
     badge: 'bg-yellow-500/20 text-yellow-400',
+    models: [
+      'gemini-3.1-pro-preview', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite-preview',
+      'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite',
+    ],
   },
   {
     value: 'kimi-code',
     label: 'Kimi Code',
-    description: "Moonshot AI's Kimi coding agent CLI.",
+    description: "Moonshot AI's Kimi coding agent CLI. Models: kimi-k2.5, kimi-k2-instruct.",
     invocation: 'kimi (stdin)',
     install: 'https://www.kimi.com',
     badge: 'bg-purple-500/20 text-purple-400',
+    models: [
+      'kimi-k2.5', 'kimi-k2-instruct',
+    ],
   },
   {
     value: 'kilo-code',
     label: 'Kilo Code',
-    description: 'VS Code fork AI coding assistant CLI.',
+    description: 'VS Code fork with 500+ models via Kilo Gateway / BYOK. Free tier includes kimi-k2.5, minimax-m2.1, glm-4.7, glm-4.5-air, deepseek-r1-0528.',
     invocation: 'kilo (stdin)',
     install: 'https://kilocode.ai',
     badge: 'bg-pink-500/20 text-pink-400',
+    models: [
+      'claude-opus-4-6', 'claude-sonnet-4-6',
+      'gemini-3.1-pro-preview',
+      'gpt-5.2', 'gpt-5.4',
+      'kimi-k2.5', 'minimax-m2.1',
+      'glm-4.7', 'glm-4.5-air',
+      'deepseek-r1-0528', 'qwen3-coder-480b',
+    ],
   },
 ];
 
@@ -82,6 +120,18 @@ function RuntimeForm({ initial = {}, onSubmit, onCancel }) {
       setSaving(false);
     }
   }
+
+  const modelListId = `runtime-model-list-${form.runtime_type}`;
+  const modelSuggestions = selected?.models || [];
+
+  const extraArgsPlaceholder =
+    form.runtime_type === 'opencode'    ? '--model claude-sonnet-4-6  (or kimi-k2.5, gpt-5.4-pro, gemini-3.1-pro, glm-5)' :
+    form.runtime_type === 'claude-code' ? '--model claude-opus-4-6  (or claude-sonnet-4-6, claude-haiku-4-5)' :
+    form.runtime_type === 'codex'       ? '--model codex-mini-latest  (or o4-mini, o4-mini-high, o3, gpt-5.4-codex, gpt-5.4-pro)' :
+    form.runtime_type === 'gemini-cli'  ? '--model gemini-3.1-pro-preview  (or gemini-3-flash-preview, gemini-2.5-pro, gemini-2.5-flash)' :
+    form.runtime_type === 'kimi-code'   ? '--model kimi-k2.5  (or kimi-k2-instruct; reads MOONSHOT_API_KEY)' :
+    form.runtime_type === 'kilo-code'   ? '(Kilo Code uses VS Code / Kilo Gateway settings — 500+ models via BYOK)' :
+    '--verbose';
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -120,18 +170,21 @@ function RuntimeForm({ initial = {}, onSubmit, onCancel }) {
         <label className="block text-sm text-gray-400 mb-1">
           Extra Args <span className="text-gray-600">(optional — appended to invocation)</span>
         </label>
+        {modelSuggestions.length > 0 && (
+          <datalist id={modelListId}>
+            {modelSuggestions.map(m => <option key={m} value={`--model ${m}`} />)}
+          </datalist>
+        )}
         <input
+          list={modelSuggestions.length > 0 ? modelListId : undefined}
           value={form.extra_args}
           onChange={set('extra_args')}
-          placeholder={
-            form.runtime_type === 'opencode' ? '--model anthropic/claude-sonnet-4-6' :
-            form.runtime_type === 'claude-code' ? '--model claude-opus-4-6' :
-            form.runtime_type === 'codex' ? '--model o4-mini' :
-            form.runtime_type === 'gemini-cli' ? '--model gemini-2.5-pro' :
-            '--verbose'
-          }
+          placeholder={extraArgsPlaceholder}
           className="w-full bg-[#0d0d0f] border border-[#2a2d35] rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 font-mono"
         />
+        {modelSuggestions.length > 0 && (
+          <p className="text-xs text-gray-600 mt-1">{modelSuggestions.length} model suggestions available — pick or type <span className="font-mono">--model &lt;id&gt;</span> and add other flags.</p>
+        )}
       </div>
       <div className="flex items-center gap-2">
         <input type="checkbox" id="is_default" checked={!!form.is_default} onChange={e => setForm(f => ({ ...f, is_default: e.target.checked }))} className="rounded" />
@@ -225,7 +278,7 @@ export default function RuntimesPage() {
         <div className="text-sm text-blue-300">
           <strong>Runtimes</strong> are CLI tools installed on the server that execute agentic coding tasks.
           Each runtime is invoked in headless mode and streams output as run events.
-          Foundry supports <strong>OpenCode</strong> (recommended — supports Claude, GPT, Gemini, Kimi), Claude Code, Codex CLI, Gemini CLI, Kimi Code, and Kilo Code.
+          Foundry supports <strong>OpenCode</strong> (recommended — supports Claude, GPT, Gemini, Kimi, Groq, NVIDIA), Claude Code, Codex CLI, Gemini CLI, Kimi Code, and Kilo Code.
           {' '}<a href="https://github.com/code-yeongyu/oh-my-openagent" target="_blank" rel="noreferrer" className="underline hover:text-blue-200">See oh-my-openagent</a> for multi-provider OpenCode setup.
         </div>
       </div>

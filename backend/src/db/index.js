@@ -66,6 +66,35 @@ function runMigrations() {
     console.log('Migration: runtime_configs CHECK constraint updated to include opencode.');
   }
 
+  // provider_configs: add nvidia, groq, kimi to CHECK constraint if missing
+  const pcTableInfo = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='provider_configs'").get();
+  if (pcTableInfo?.sql && !pcTableInfo.sql.includes("'nvidia'")) {
+    db.exec(`
+      ALTER TABLE provider_configs RENAME TO provider_configs_old;
+      CREATE TABLE provider_configs (
+        id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        provider_type TEXT NOT NULL CHECK(provider_type IN ('openai','anthropic','google','openrouter','minimax','glm','nvidia','groq','kimi')),
+        base_url TEXT,
+        api_key_env_var TEXT,
+        api_key TEXT,
+        model TEXT,
+        is_default INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      INSERT INTO provider_configs (id, workspace_id, name, provider_type, base_url, api_key_env_var, model, is_default, created_at, updated_at)
+        SELECT id, workspace_id, name, provider_type, base_url, api_key_env_var, model, is_default, created_at, updated_at
+        FROM provider_configs_old;
+      DROP TABLE provider_configs_old;
+    `);
+    console.log('Migration: provider_configs CHECK constraint updated to include nvidia, groq, kimi.');
+  }
+
+  // provider_configs: add api_key column for direct key storage
+  addColumnIfMissing('provider_configs', 'api_key', 'TEXT');
+
   // runs: add token/cost columns
   addColumnIfMissing('runs', 'tokens_input', 'INTEGER NOT NULL DEFAULT 0');
   addColumnIfMissing('runs', 'tokens_output', 'INTEGER NOT NULL DEFAULT 0');

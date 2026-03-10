@@ -255,12 +255,14 @@ export async function providerDispatch(run, agent, providerConfig) {
 
   const card = db.prepare('SELECT * FROM cards WHERE id = ?').get(run.card_id);
   const apiKeyEnvVar = providerConfig?.api_key_env_var;
-  const apiKey = apiKeyEnvVar ? process.env[apiKeyEnvVar] : null;
+  const apiKey = (apiKeyEnvVar ? process.env[apiKeyEnvVar] : null) || providerConfig?.api_key || null;
 
   if (apiKey && providerConfig?.provider_type === 'openai') {
     await openaiDispatch(run, agent, providerConfig, card, apiKey);
   } else if (apiKey && providerConfig?.provider_type === 'anthropic') {
     await anthropicDispatch(run, agent, providerConfig, card, apiKey);
+  } else if (apiKey && ['groq', 'nvidia', 'kimi', 'minimax', 'glm'].includes(providerConfig?.provider_type)) {
+    await openaiCompatDispatch(run, agent, providerConfig, card, apiKey);
   } else {
     // No API key or unsupported provider — simulate
     await simulateProviderExecution(run, providerConfig);
@@ -355,6 +357,66 @@ async function anthropicDispatch(run, agent, providerConfig, card, apiKey) {
 }
 
 /**
+ * Dispatch to any OpenAI-compatible provider (Groq, NVIDIA NIM, Kimi/Moonshot, MiniMax, GLM/Z.ai).
+ */
+const OPENAI_COMPAT_BASE_URLS = {
+  groq: 'https://api.groq.com/openai',
+  nvidia: 'https://integrate.api.nvidia.com',
+  kimi: 'https://api.moonshot.cn',
+  minimax: 'https://api.minimax.chat',
+  glm: 'https://open.bigmodel.cn/api/paas',
+};
+
+const OPENAI_COMPAT_DEFAULT_MODELS = {
+  groq: 'llama-3.3-70b-versatile',
+  nvidia: 'meta/llama-3.1-70b-instruct',
+  kimi: 'moonshot-v1-8k',
+  minimax: 'MiniMax-Text-01',
+  glm: 'glm-4',
+};
+
+async function openaiCompatDispatch(run, agent, providerConfig, card, apiKey) {
+  const db = getDb();
+  const providerType = providerConfig.provider_type;
+  const model = providerConfig.model || OPENAI_COMPAT_DEFAULT_MODELS[providerType] || providerType;
+  const baseUrl = providerConfig.base_url || OPENAI_COMPAT_BASE_URLS[providerType] || '';
+  const messages = buildMessages(agent, card);
+
+  await logEvent(run.id, 'api_call', `Calling ${providerType} API (${model}) via OpenAI-compatible endpoint...`);
+
+  const response = await fetch(`${baseUrl}/v1/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({ model, messages, max_tokens: 2048 }),
+  });
+
+  if (!response.ok) {
+    const errBody = await response.text();
+    throw new Error(`${providerType} API error ${response.status}: ${errBody}`);
+  }
+
+  const data = await response.json();
+  const content = data.choices?.[0]?.message?.content || '';
+  const tokensIn = data.usage?.prompt_tokens || 0;
+  const tokensOut = data.usage?.completion_tokens || 0;
+  const costUsd = estimateCost(model, tokensIn, tokensOut);
+
+  await logEvent(run.id, 'api_response', `Received response from ${providerType} (${tokensIn} in / ${tokensOut} out tokens, $${costUsd.toFixed(6)})`);
+  await logEvent(run.id, 'stdout', content);
+
+  db.prepare(`
+    UPDATE runs SET status = 'success', finished_at = datetime('now'), exit_code = 0,
+      tokens_input = tokens_input + ?, tokens_output = tokens_output + ?, cost_usd = cost_usd + ?,
+      updated_at = datetime('now') WHERE id = ?
+  `).run(tokensIn, tokensOut, costUsd, run.id);
+  await logEvent(run.id, 'success', 'Provider execution completed successfully');
+}
+
+
+/**
  * Estimates cost in USD based on model and token counts.
  * Prices are approximate (per million tokens) as of mid-2025.
  */
@@ -385,6 +447,26 @@ export function estimateCost(model, tokensIn, tokensOut) {
   if (m.includes('gemini-3-pro') || m.includes('gemini-2.5-pro')) return (tokensIn * 1.25 + tokensOut * 10.0) / 1_000_000;
   if (m.includes('gemini-3-flash') || m.includes('gemini-2.5-flash')) return (tokensIn * 0.075 + tokensOut * 0.30) / 1_000_000;
   if (m.includes('gemini')) return (tokensIn * 0.15 + tokensOut * 0.60) / 1_000_000;
+
+  // Groq (approximate)
+  if (m.includes('llama-3.3-70b') || m.includes('llama-3.1-70b')) return (tokensIn * 0.59 + tokensOut * 0.79) / 1_000_000;
+  if (m.includes('llama-3.1-8b') || m.includes('llama-3.2-1b') || m.includes('llama-3.2-3b')) return (tokensIn * 0.05 + tokensOut * 0.08) / 1_000_000;
+  if (m.includes('mixtral-8x7b')) return (tokensIn * 0.24 + tokensOut * 0.24) / 1_000_000;
+
+  // NVIDIA NIM (approximate)
+  if (m.includes('nemotron-70b') || m.includes('llama-3.1-nemotron')) return (tokensIn * 0.35 + tokensOut * 0.40) / 1_000_000;
+
+  // Kimi / Moonshot AI (approximate)
+  if (m.includes('moonshot-v1-128k')) return (tokensIn * 0.11 + tokensOut * 0.38) / 1_000_000;
+  if (m.includes('moonshot-v1-32k')) return (tokensIn * 0.031 + tokensOut * 0.094) / 1_000_000;
+  if (m.includes('moonshot')) return (tokensIn * 0.012 + tokensOut * 0.038) / 1_000_000;
+
+  // MiniMax (approximate)
+  if (m.includes('minimax') || m.includes('abab')) return (tokensIn * 0.10 + tokensOut * 0.10) / 1_000_000;
+
+  // GLM / Z.ai (approximate)
+  if (m.includes('glm-4-plus')) return (tokensIn * 0.14 + tokensOut * 0.14) / 1_000_000;
+  if (m.includes('glm-4')) return (tokensIn * 0.07 + tokensOut * 0.07) / 1_000_000;
 
   // Default: assume a mid-range cost
   return (tokensIn * 1.0 + tokensOut * 3.0) / 1_000_000;
