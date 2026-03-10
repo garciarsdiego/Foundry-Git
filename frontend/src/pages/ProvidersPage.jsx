@@ -1,17 +1,57 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Cloud, Loader, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Cloud, Loader, Pencil, Trash2, Key, Eye, EyeOff } from 'lucide-react';
 import api from '../components/api.js';
 import Modal from '../components/Modal.jsx';
 import ConfirmModal from '../components/ConfirmModal.jsx';
 
 const PROVIDER_TYPES = [
-  { value: 'openai', label: 'OpenAI', desc: 'GPT-4o, GPT-4 Turbo, and more' },
-  { value: 'anthropic', label: 'Anthropic', desc: 'Claude 3.5 Sonnet, Claude 3 Opus' },
-  { value: 'google', label: 'Google', desc: 'Gemini 1.5 Pro, Gemini Flash' },
+  { value: 'openai', label: 'OpenAI', desc: 'GPT-4o, o4, o3, and more' },
+  { value: 'anthropic', label: 'Anthropic', desc: 'Claude 3.5 / 4 Sonnet, Opus, Haiku' },
+  { value: 'google', label: 'Google', desc: 'Gemini 2.5 Pro, Flash, and more' },
   { value: 'openrouter', label: 'OpenRouter', desc: 'Unified access to 100+ models' },
-  { value: 'minimax', label: 'MiniMax', desc: 'MiniMax models' },
-  { value: 'glm', label: 'GLM / Z.ai', desc: 'ChatGLM and Z.ai models' },
+  { value: 'minimax', label: 'MiniMax', desc: 'MiniMax-Text-01, abab coding plan' },
+  { value: 'glm', label: 'GLM / Z.ai', desc: 'GLM-4, GLM-4-Plus — Z.ai coding plan' },
+  { value: 'nvidia', label: 'NVIDIA NIM', desc: 'Llama, Nemotron, Mixtral on NVIDIA' },
+  { value: 'groq', label: 'Groq', desc: 'Llama 3, Mixtral — ultra-fast inference' },
+  { value: 'kimi', label: 'Kimi (Moonshot)', desc: 'moonshot-v1-8k/32k/128k coding plan' },
 ];
+
+/** Suggested models per provider shown as datalist options. */
+const PROVIDER_MODELS = {
+  openai: [
+    'gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-4', 'gpt-3.5-turbo',
+    'o4', 'o4-mini', 'o3', 'o3-mini',
+  ],
+  anthropic: [
+    'claude-opus-4-5', 'claude-sonnet-4-5', 'claude-haiku-4-5',
+    'claude-3-5-sonnet-20241022', 'claude-3-opus-20240229', 'claude-3-haiku-20240307',
+  ],
+  google: [
+    'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-1.0-pro',
+  ],
+  openrouter: [
+    'openai/gpt-4o', 'openai/gpt-4o-mini', 'anthropic/claude-3.5-sonnet',
+    'google/gemini-pro-1.5', 'meta-llama/llama-3.1-8b-instruct', 'mistralai/mixtral-8x7b-instruct',
+  ],
+  minimax: [
+    'MiniMax-Text-01', 'abab6.5s-chat', 'abab5.5-chat',
+  ],
+  glm: [
+    'glm-4', 'glm-4-plus', 'glm-4-long', 'glm-4v', 'glm-3-turbo',
+  ],
+  nvidia: [
+    'meta/llama-3.1-70b-instruct', 'meta/llama-3.1-8b-instruct',
+    'nvidia/llama-3.1-nemotron-70b-instruct', 'mistralai/mixtral-8x22b-instruct-v0.1',
+    'mistralai/mistral-large-2-instruct', 'microsoft/phi-3-mini-128k-instruct',
+  ],
+  groq: [
+    'llama-3.3-70b-versatile', 'llama-3.1-70b-versatile', 'llama-3.1-8b-instant',
+    'mixtral-8x7b-32768', 'gemma2-9b-it', 'gemma-7b-it',
+  ],
+  kimi: [
+    'moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k',
+  ],
+};
 
 function ProviderForm({ initial = {}, onSubmit, onCancel }) {
   const [form, setForm] = useState({
@@ -19,21 +59,26 @@ function ProviderForm({ initial = {}, onSubmit, onCancel }) {
     provider_type: initial.provider_type || 'openai',
     base_url: initial.base_url || '',
     api_key_env_var: initial.api_key_env_var || '',
+    api_key: '',
     model: initial.model || '',
     is_default: initial.is_default || false,
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [showKey, setShowKey] = useState(false);
 
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
 
   const DEFAULTS = {
-    openai: { model: 'gpt-4o', env: 'OPENAI_API_KEY' },
+    openai:    { model: 'gpt-4o',                     env: 'OPENAI_API_KEY' },
     anthropic: { model: 'claude-3-5-sonnet-20241022', env: 'ANTHROPIC_API_KEY' },
-    google: { model: 'gemini-1.5-pro', env: 'GOOGLE_API_KEY' },
-    openrouter: { model: 'openai/gpt-4o', env: 'OPENROUTER_API_KEY' },
-    minimax: { model: 'MiniMax-Text-01', env: 'MINIMAX_API_KEY' },
-    glm: { model: 'glm-4', env: 'GLM_API_KEY' },
+    google:    { model: 'gemini-2.5-pro',              env: 'GOOGLE_API_KEY' },
+    openrouter:{ model: 'openai/gpt-4o',              env: 'OPENROUTER_API_KEY' },
+    minimax:   { model: 'MiniMax-Text-01',             env: 'MINIMAX_API_KEY' },
+    glm:       { model: 'glm-4',                       env: 'GLM_API_KEY' },
+    nvidia:    { model: 'meta/llama-3.1-70b-instruct', env: 'NVIDIA_API_KEY' },
+    groq:      { model: 'llama-3.3-70b-versatile',    env: 'GROQ_API_KEY' },
+    kimi:      { model: 'moonshot-v1-8k',              env: 'MOONSHOT_API_KEY' },
   };
 
   function handleTypeChange(type) {
@@ -59,6 +104,9 @@ function ProviderForm({ initial = {}, onSubmit, onCancel }) {
       setSaving(false);
     }
   }
+
+  const modelListId = `model-list-${form.provider_type}`;
+  const modelSuggestions = PROVIDER_MODELS[form.provider_type] || [];
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -87,14 +135,59 @@ function ProviderForm({ initial = {}, onSubmit, onCancel }) {
           ))}
         </div>
       </div>
+
+      {/* API Key — direct input */}
       <div>
-        <label className="block text-sm text-gray-400 mb-1">API Key Env Var</label>
-        <input value={form.api_key_env_var} onChange={set('api_key_env_var')} placeholder="OPENAI_API_KEY" className="w-full bg-[#0d0d0f] border border-[#2a2d35] rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 font-mono" />
-        <p className="text-xs text-gray-600 mt-1">Environment variable name containing the API key</p>
+        <label className="block text-sm text-gray-400 mb-1 flex items-center gap-1.5">
+          <Key size={13} /> API Key <span className="text-gray-600">(stored securely on server)</span>
+        </label>
+        <div className="relative">
+          <input
+            type={showKey ? 'text' : 'password'}
+            value={form.api_key}
+            onChange={set('api_key')}
+            placeholder={initial.api_key_set ? '•••••••• (key stored — leave blank to keep)' : `Paste your ${PROVIDER_TYPES.find(p => p.value === form.provider_type)?.label} API key`}
+            className="w-full bg-[#0d0d0f] border border-[#2a2d35] rounded-lg px-3 py-2 pr-10 text-white text-sm focus:outline-none focus:border-blue-500 font-mono"
+          />
+          <button
+            type="button"
+            onClick={() => setShowKey(v => !v)}
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-600 hover:text-gray-400"
+            tabIndex={-1}
+          >
+            {showKey ? <EyeOff size={15} /> : <Eye size={15} />}
+          </button>
+        </div>
+        {initial.api_key_set && (
+          <p className="text-xs text-green-500 mt-1 flex items-center gap-1"><Key size={11} /> API key is stored. Enter a new value to replace it.</p>
+        )}
+        <p className="text-xs text-gray-600 mt-1">Alternative: use an environment variable name below instead of pasting the key directly.</p>
       </div>
+
+      {/* API Key env var — alternative */}
+      <div>
+        <label className="block text-sm text-gray-400 mb-1">API Key Env Var <span className="text-gray-600">(optional — env variable name)</span></label>
+        <input value={form.api_key_env_var} onChange={set('api_key_env_var')} placeholder={DEFAULTS[form.provider_type]?.env || 'MY_API_KEY'} className="w-full bg-[#0d0d0f] border border-[#2a2d35] rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 font-mono" />
+        <p className="text-xs text-gray-600 mt-1">If set, the value of this server-side environment variable is used instead of the stored key above.</p>
+      </div>
+
       <div>
         <label className="block text-sm text-gray-400 mb-1">Model</label>
-        <input value={form.model} onChange={set('model')} placeholder="gpt-4o" className="w-full bg-[#0d0d0f] border border-[#2a2d35] rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500" />
+        {modelSuggestions.length > 0 && (
+          <datalist id={modelListId}>
+            {modelSuggestions.map(m => <option key={m} value={m} />)}
+          </datalist>
+        )}
+        <input
+          list={modelSuggestions.length > 0 ? modelListId : undefined}
+          value={form.model}
+          onChange={set('model')}
+          placeholder={DEFAULTS[form.provider_type]?.model || 'model-name'}
+          className="w-full bg-[#0d0d0f] border border-[#2a2d35] rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500"
+        />
+        {modelSuggestions.length > 0 && (
+          <p className="text-xs text-gray-600 mt-1">Type or pick from {modelSuggestions.length} suggestions — you can also enter any custom model ID.</p>
+        )}
       </div>
       <div>
         <label className="block text-sm text-gray-400 mb-1">Base URL <span className="text-gray-600">(override, optional)</span></label>
@@ -164,7 +257,7 @@ export default function ProvidersPage() {
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold text-white">Providers</h1>
-          <p className="text-gray-400 mt-1">Configure AI provider connections (OpenAI, Anthropic, Google, etc.)</p>
+          <p className="text-gray-400 mt-1">Configure AI provider connections (OpenAI, Anthropic, Google, NVIDIA, Groq, Kimi, and more)</p>
         </div>
         <button onClick={() => setModalOpen(true)} className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm transition-colors">
           <Plus size={16} /> New Provider
@@ -195,9 +288,10 @@ export default function ProvidersPage() {
                 </div>
               </div>
               <h3 className="font-semibold text-white mb-1">{prov.name}</h3>
-              <div className="flex items-center gap-2 mt-2">
+              <div className="flex items-center gap-2 mt-2 flex-wrap">
                 <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400">{getProviderLabel(prov.provider_type)}</span>
                 {prov.is_default ? <span className="text-xs px-2 py-0.5 rounded-full bg-green-500/20 text-green-400">default</span> : null}
+                {prov.api_key_set ? <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400 flex items-center gap-1"><Key size={9} /> key stored</span> : null}
               </div>
               {prov.model && <p className="text-xs text-gray-500 mt-2">{prov.model}</p>}
               {prov.api_key_env_var && <p className="text-xs text-gray-600 mt-1 font-mono">{prov.api_key_env_var}</p>}

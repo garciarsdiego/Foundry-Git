@@ -150,9 +150,9 @@ Foundry supports two agent execution models:
 
 ### Provider Mode
 The agent calls an AI provider API directly:
-- Supports: OpenAI, Anthropic, Google, OpenRouter, MiniMax, GLM/Z.ai
+- Supports: OpenAI, Anthropic, Google, OpenRouter, MiniMax, GLM/Z.ai, NVIDIA NIM, Groq, Kimi (Moonshot AI)
 - Configuration: `provider_config_id` on the agent
-- The `api_key_env_var` field names the environment variable holding the API key (key is never stored in DB)
+- **API Key options**: paste the key directly in the UI (stored on the server) or set `api_key_env_var` to reference a server-side environment variable (recommended for production). The env var takes precedence when both are set.
 
 ### Runtime Mode
 The agent invokes a CLI tool installed on the server. Each runtime is invoked in non-interactive (headless) mode:
@@ -184,7 +184,7 @@ Any agent can have a `fallback_provider_config_id`. If runtime execution fails, 
 - ✅ Execution service with real subprocess invocation for CLI runtimes (falls back to simulation if binary not installed)
 - ✅ Per-runtime non-interactive invocation flags (`claude -p`, `opencode run`, `gemini -p`, `codex` positional)
 - ✅ OpenCode runtime support with [oh-my-openagent](https://github.com/code-yeongyu/oh-my-openagent) compatibility
-- ✅ Real provider API calls for OpenAI, Anthropic, Google Gemini, and OpenRouter
+- ✅ Real provider API calls for OpenAI, Anthropic, Google Gemini, OpenRouter, Groq, NVIDIA NIM, and Kimi (Moonshot AI)
 - ✅ Execution policy enforcement: per-workspace retry and timeout configuration applied during dispatch
 - ✅ Real GitHub integration via Octokit: issue sync, branch creation, PR creation, repo listing
 - ✅ **SSE streaming** — `GET /api/runs/:id/stream` pushes run events to the browser in real-time via EventSource
@@ -203,14 +203,14 @@ Any agent can have a `fallback_provider_config_id`. If runtime execution fails, 
 - ✅ Token & cost tracking per run and chat message
 - ✅ Agent monthly budget enforcement with dashboard cost progress bars
 - ✅ Hierarchic teams with org chart view
-- ✅ **Workspace name editing** directly from Settings page
+- ✅ **Direct API key entry** in the Providers UI — paste the key directly or reference a server-side env var; key is masked in all API responses
 
 ## TODO / Future Work
 
 - [ ] Multi-user accounts (currently single admin)
 - [ ] Webhook support for GitHub event-driven runs
 - [ ] Visual drag-and-drop flow editor (currently step-list based)
-- [ ] MiniMax and GLM provider dispatch in chat
+- [ ] MiniMax, GLM/Z.ai, NVIDIA NIM, and Kimi provider dispatch in chat (currently simulated unless API key is configured)
 - [ ] Metrics and analytics charts
 
 ## Configuration
@@ -231,6 +231,11 @@ Key variables:
 - `ANTHROPIC_API_KEY` — Anthropic API key
 - `GOOGLE_API_KEY` — Google Gemini API key
 - `OPENROUTER_API_KEY` — OpenRouter API key
+- `MINIMAX_API_KEY` — MiniMax API key
+- `GLM_API_KEY` — GLM / Z.ai API key
+- `NVIDIA_API_KEY` — NVIDIA NIM API key
+- `GROQ_API_KEY` — Groq API key
+- `MOONSHOT_API_KEY` — Kimi (Moonshot AI) API key
 - `GITHUB_TOKEN` — GitHub personal access token (referenced by GitHub connections)
 
 ### Enabling Authentication

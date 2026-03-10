@@ -124,10 +124,12 @@ function RuntimeForm({ initial = {}, onSubmit, onCancel }) {
           value={form.extra_args}
           onChange={set('extra_args')}
           placeholder={
-            form.runtime_type === 'opencode' ? '--model anthropic/claude-sonnet-4-6' :
-            form.runtime_type === 'claude-code' ? '--model claude-opus-4-6' :
-            form.runtime_type === 'codex' ? '--model o4-mini' :
-            form.runtime_type === 'gemini-cli' ? '--model gemini-2.5-pro' :
+            form.runtime_type === 'opencode'    ? '--model anthropic/claude-sonnet-4-5  (or openai/gpt-4o, google/gemini-2.5-pro, groq/llama-3.3-70b-versatile)' :
+            form.runtime_type === 'claude-code' ? '--model claude-opus-4-5  (or claude-sonnet-4-5, claude-haiku-4-5)' :
+            form.runtime_type === 'codex'       ? '--model o4-mini  (or o3-mini, gpt-4o)' :
+            form.runtime_type === 'gemini-cli'  ? '--model gemini-2.5-pro  (or gemini-2.5-flash, gemini-1.5-pro)' :
+            form.runtime_type === 'kimi-code'   ? '(Kimi reads MOONSHOT_API_KEY; no model flag needed)' :
+            form.runtime_type === 'kilo-code'   ? '(Kilo Code uses its own VS Code settings; no model flag needed)' :
             '--verbose'
           }
           className="w-full bg-[#0d0d0f] border border-[#2a2d35] rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 font-mono"
@@ -225,7 +227,7 @@ export default function RuntimesPage() {
         <div className="text-sm text-blue-300">
           <strong>Runtimes</strong> are CLI tools installed on the server that execute agentic coding tasks.
           Each runtime is invoked in headless mode and streams output as run events.
-          Foundry supports <strong>OpenCode</strong> (recommended — supports Claude, GPT, Gemini, Kimi), Claude Code, Codex CLI, Gemini CLI, Kimi Code, and Kilo Code.
+          Foundry supports <strong>OpenCode</strong> (recommended — supports Claude, GPT, Gemini, Kimi, Groq, NVIDIA), Claude Code, Codex CLI, Gemini CLI, Kimi Code, and Kilo Code.
           {' '}<a href="https://github.com/code-yeongyu/oh-my-openagent" target="_blank" rel="noreferrer" className="underline hover:text-blue-200">See oh-my-openagent</a> for multi-provider OpenCode setup.
         </div>
       </div>

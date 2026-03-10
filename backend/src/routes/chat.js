@@ -73,7 +73,9 @@ router.post('/', async (req, res) => {
     let assistantContent = null;
     let responseMetadata = {};
 
-    const apiKey = providerConfig?.api_key_env_var ? process.env[providerConfig.api_key_env_var] : null;
+    const apiKey = (providerConfig?.api_key_env_var ? process.env[providerConfig.api_key_env_var] : null)
+      || providerConfig?.api_key
+      || null;
 
     if (apiKey && providerConfig?.provider_type === 'openai') {
       const result = await callOpenAI(agent, providerConfig, history, apiKey);
@@ -91,6 +93,10 @@ router.post('/', async (req, res) => {
       const result = await callOpenRouter(agent, providerConfig, history, apiKey);
       assistantContent = result.content;
       responseMetadata = { provider: 'openrouter', model: result.model, usage: result.usage };
+    } else if (apiKey && ['groq', 'nvidia', 'kimi', 'minimax', 'glm'].includes(providerConfig?.provider_type)) {
+      const result = await callOpenAICompatible(agent, providerConfig, history, apiKey);
+      assistantContent = result.content;
+      responseMetadata = { provider: providerConfig.provider_type, model: result.model, usage: result.usage };
     } else {
       // Simulated response when no API key is configured
       assistantContent = generateSimulatedResponse(message, agent);
@@ -283,4 +289,58 @@ async function callOpenRouter(agent, providerConfig, history, apiKey) {
   };
 }
 
+/**
+ * Generic OpenAI-compatible chat completion caller.
+ * Used for Groq, NVIDIA NIM, Kimi (Moonshot AI), MiniMax, and GLM/Z.ai.
+ */
+const OPENAI_COMPAT_BASE_URLS = {
+  groq: 'https://api.groq.com/openai',
+  nvidia: 'https://integrate.api.nvidia.com',
+  kimi: 'https://api.moonshot.cn',
+  minimax: 'https://api.minimax.chat',
+  glm: 'https://open.bigmodel.cn/api/paas',
+};
+
+const OPENAI_COMPAT_DEFAULT_MODELS = {
+  groq: 'llama-3.3-70b-versatile',
+  nvidia: 'meta/llama-3.1-70b-instruct',
+  kimi: 'moonshot-v1-8k',
+  minimax: 'MiniMax-Text-01',
+  glm: 'glm-4',
+};
+
+async function callOpenAICompatible(agent, providerConfig, history, apiKey) {
+  const providerType = providerConfig.provider_type;
+  const model = providerConfig.model || OPENAI_COMPAT_DEFAULT_MODELS[providerType] || providerType;
+  const baseUrl = providerConfig.base_url || OPENAI_COMPAT_BASE_URLS[providerType] || '';
+
+  const messages = [];
+  if (agent?.system_prompt) messages.push({ role: 'system', content: agent.system_prompt });
+  for (const h of history) {
+    messages.push({ role: h.role === 'assistant' ? 'assistant' : 'user', content: h.content });
+  }
+
+  const response = await fetch(`${baseUrl}/v1/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({ model, messages, max_tokens: 1024 }),
+  });
+
+  if (!response.ok) {
+    const errBody = await response.text();
+    throw new Error(`${providerType} API error ${response.status}: ${errBody}`);
+  }
+
+  const data = await response.json();
+  return {
+    content: data.choices?.[0]?.message?.content || '',
+    model,
+    usage: data.usage,
+  };
+}
+
 export default router;
+
