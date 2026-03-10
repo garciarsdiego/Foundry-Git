@@ -5,6 +5,125 @@ import { dispatchFlowRun } from '../services/flowService.js';
 
 const router = Router();
 
+// --- Workflow Templates (defined before /:id to avoid route conflicts) ---
+
+const FLOW_TEMPLATES = [
+  {
+    id: 'tpl-flow-code-review',
+    name: 'Automated Code Review',
+    description: 'Pull request review pipeline: security audit → code quality → test coverage check.',
+    category: 'engineering',
+    steps: [
+      { name: 'Security Audit', step_type: 'agent', description: 'Scan for OWASP vulnerabilities and secrets exposure' },
+      { name: 'Code Quality Review', step_type: 'agent', description: 'Check correctness, performance and best practices' },
+      { name: 'Test Coverage Analysis', step_type: 'agent', description: 'Identify untested code paths and suggest tests' },
+      { name: 'Summary Report', step_type: 'agent', description: 'Synthesize findings into an actionable PR comment' },
+    ],
+  },
+  {
+    id: 'tpl-flow-feature-dev',
+    name: 'Feature Development',
+    description: 'End-to-end feature pipeline: spec → implementation → tests → documentation.',
+    category: 'engineering',
+    steps: [
+      { name: 'Write Specification', step_type: 'agent', description: 'Create user stories and acceptance criteria' },
+      { name: 'Implement Feature', step_type: 'agent', description: 'Write the implementation code' },
+      { name: 'Write Tests', step_type: 'agent', description: 'Generate unit and integration tests' },
+      { name: 'Update Documentation', step_type: 'agent', description: 'Update README and API docs' },
+    ],
+  },
+  {
+    id: 'tpl-flow-research',
+    name: 'Deep Research',
+    description: 'Multi-stage research pipeline: scope → collect → analyze → report.',
+    category: 'research',
+    steps: [
+      { name: 'Define Research Scope', step_type: 'agent', description: 'Clarify research question and success criteria' },
+      { name: 'Information Gathering', step_type: 'parallel', description: 'Collect data from multiple sources in parallel' },
+      { name: 'Analysis & Synthesis', step_type: 'agent', description: 'Cross-reference findings and identify patterns' },
+      { name: 'Report Writing', step_type: 'agent', description: 'Produce structured report with executive summary' },
+    ],
+  },
+  {
+    id: 'tpl-flow-incident-response',
+    name: 'Incident Response',
+    description: 'Structured incident response: detect → diagnose → remediate → post-mortem.',
+    category: 'operations',
+    steps: [
+      { name: 'Assess Impact', step_type: 'agent', description: 'Determine scope and severity of the incident' },
+      { name: 'Root Cause Analysis', step_type: 'agent', description: 'Identify the root cause and contributing factors' },
+      { name: 'Implement Fix', step_type: 'agent', description: 'Apply the remediation' },
+      { name: 'Post-Mortem Report', step_type: 'agent', description: 'Document timeline, cause, fix, and action items' },
+    ],
+  },
+  {
+    id: 'tpl-flow-content-pipeline',
+    name: 'Content Creation Pipeline',
+    description: 'Blog / docs pipeline: research → outline → draft → review → publish.',
+    category: 'content',
+    steps: [
+      { name: 'Research Topic', step_type: 'agent', description: 'Research the topic and collect key insights' },
+      { name: 'Create Outline', step_type: 'agent', description: 'Structure the content with headings and key points' },
+      { name: 'Write Draft', step_type: 'agent', description: 'Write the full draft content' },
+      { name: 'Review & Edit', step_type: 'agent', description: 'Check for clarity, accuracy and style' },
+    ],
+  },
+  {
+    id: 'tpl-flow-data-pipeline',
+    name: 'Data Analysis Pipeline',
+    description: 'Data workflow: ingest → clean → analyze → visualize → report.',
+    category: 'data',
+    steps: [
+      { name: 'Data Ingestion', step_type: 'agent', description: 'Load and validate raw data sources' },
+      { name: 'Data Cleaning', step_type: 'agent', description: 'Handle missing values, outliers and formatting' },
+      { name: 'Analysis', step_type: 'parallel', description: 'Run statistical analysis and pattern detection' },
+      { name: 'Insight Report', step_type: 'agent', description: 'Summarise findings with actionable recommendations' },
+    ],
+  },
+];
+
+// List workflow templates
+router.get('/templates', (req, res) => {
+  const { category } = req.query;
+  let templates = FLOW_TEMPLATES;
+  if (category) templates = templates.filter(t => t.category === category);
+  res.json(templates);
+});
+
+// Instantiate a workflow from a template
+router.post('/from-template', (req, res) => {
+  try {
+    const db = getDb();
+    const { workspace_id, project_id, template_id, name } = req.body;
+    if (!workspace_id || !template_id) {
+      return res.status(400).json({ error: 'workspace_id and template_id are required' });
+    }
+    const template = FLOW_TEMPLATES.find(t => t.id === template_id);
+    if (!template) return res.status(404).json({ error: 'Template not found' });
+
+    const flowId = uuidv4();
+    const flowName = name || template.name;
+    db.prepare(`
+      INSERT INTO flows (id, workspace_id, project_id, name, description, status)
+      VALUES (?, ?, ?, ?, ?, 'draft')
+    `).run(flowId, workspace_id, project_id || null, flowName, template.description);
+
+    // Create steps
+    template.steps.forEach((step, i) => {
+      db.prepare(`
+        INSERT INTO flow_steps (id, flow_id, name, step_type, position, config_json)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(uuidv4(), flowId, step.name, step.step_type, i, JSON.stringify({ description: step.description }));
+    });
+
+    const flow = db.prepare('SELECT * FROM flows WHERE id = ?').get(flowId);
+    const steps = db.prepare('SELECT * FROM flow_steps WHERE flow_id = ? ORDER BY position').all(flowId);
+    res.status(201).json({ ...flow, steps });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // List flows
 router.get('/', (req, res) => {
   try {
@@ -222,5 +341,6 @@ router.get('/:id/runs', (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
 
 export default router;

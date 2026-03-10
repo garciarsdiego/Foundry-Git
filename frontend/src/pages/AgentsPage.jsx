@@ -1,10 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Bot, Loader, Pencil, Trash2, Cpu, Cloud, Search } from 'lucide-react';
+import { Plus, Bot, Loader, Pencil, Trash2, Cpu, Cloud, Search, LayoutTemplate, Download, ChevronRight, Code2, Shield, Database, Microscope, Palette, Workflow, Globe } from 'lucide-react';
 import api from '../components/api.js';
 import Modal from '../components/Modal.jsx';
 import ConfirmModal from '../components/ConfirmModal.jsx';
+import { useToast } from '../components/Toast.jsx';
 
 const EXECUTION_MODES = ['provider', 'runtime'];
+
+const CATEGORY_META = {
+  engineering: { label: 'Engineering', color: 'text-blue-400', bg: 'bg-blue-500/20' },
+  product: { label: 'Product', color: 'text-purple-400', bg: 'bg-purple-500/20' },
+  documentation: { label: 'Docs', color: 'text-green-400', bg: 'bg-green-500/20' },
+  security: { label: 'Security', color: 'text-red-400', bg: 'bg-red-500/20' },
+  data: { label: 'Data', color: 'text-orange-400', bg: 'bg-orange-500/20' },
+  research: { label: 'Research', color: 'text-teal-400', bg: 'bg-teal-500/20' },
+  design: { label: 'Design', color: 'text-pink-400', bg: 'bg-pink-500/20' },
+  orchestration: { label: 'Orchestration', color: 'text-yellow-400', bg: 'bg-yellow-500/20' },
+  automation: { label: 'Automation', color: 'text-cyan-400', bg: 'bg-cyan-500/20' },
+};
 
 function AgentForm({ initial = {}, providers, runtimes, onSubmit, onCancel }) {
   const [form, setForm] = useState({
@@ -114,6 +127,11 @@ export default function AgentsPage() {
   const [workspaceId, setWorkspaceId] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [search, setSearch] = useState('');
+  const [tab, setTab] = useState('agents');
+  const [templates, setTemplates] = useState([]);
+  const [templatesLoading, setTemplatesLoading] = useState(false);
+  const [deployingId, setDeployingId] = useState(null);
+  const toast = useToast();
 
   async function load() {
     try {
@@ -134,7 +152,21 @@ export default function AgentsPage() {
     }
   }
 
+  async function loadTemplates() {
+    if (templates.length) return;
+    setTemplatesLoading(true);
+    try {
+      const data = await api.get('/agents/templates');
+      setTemplates(data);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setTemplatesLoading(false);
+    }
+  }
+
   useEffect(() => { load(); }, []);
+  useEffect(() => { if (tab === 'templates') loadTemplates(); }, [tab]);
 
   async function handleCreate(data) {
     await api.post('/agents', { ...data, workspace_id: workspaceId });
@@ -157,9 +189,30 @@ export default function AgentsPage() {
     load();
   }
 
+  async function deployTemplate(tpl) {
+    if (!workspaceId) return toast('No workspace found', 'error');
+    setDeployingId(tpl.id);
+    try {
+      await api.post('/agents', {
+        workspace_id: workspaceId,
+        name: tpl.name,
+        description: tpl.description,
+        execution_mode: tpl.execution_mode || 'provider',
+        system_prompt: tpl.system_prompt || null,
+      });
+      toast(`Agent "${tpl.name}" deployed`, 'success');
+      setTab('agents');
+      load();
+    } catch (err) {
+      toast(err.message, 'error');
+    } finally {
+      setDeployingId(null);
+    }
+  }
+
   return (
     <div className="p-6 max-w-6xl mx-auto">
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-white">Agents</h1>
           <p className="text-gray-400 mt-1">Configure AI agents powered by providers or runtime CLIs</p>
@@ -180,44 +233,106 @@ export default function AgentsPage() {
         </div>
       </div>
 
-      {loading ? (
-        <div className="flex items-center justify-center py-20 text-gray-500">
-          <Loader size={20} className="animate-spin mr-2" /> Loading...
-        </div>
-      ) : agents.length === 0 ? (
-        <div className="text-center py-20 text-gray-500">
-          <Bot size={48} className="mx-auto mb-4 opacity-30" />
-          <p className="text-lg font-medium text-gray-400 mb-2">No agents yet</p>
-          <button onClick={() => setModalOpen(true)} className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm">Create Agent</button>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {agents.filter(a => !search || a.name.toLowerCase().includes(search.toLowerCase()) || (a.description || '').toLowerCase().includes(search.toLowerCase())).map(agent => (
-            <div key={agent.id} className="bg-[#16181c] border border-[#2a2d35] rounded-xl p-5 hover:border-[#3a3d45] transition-colors group">
-              <div className="flex items-start justify-between mb-3">
-                <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${agent.execution_mode === 'runtime' ? 'bg-purple-600/20' : 'bg-blue-600/20'}`}>
-                  {agent.execution_mode === 'runtime' ? <Cpu size={16} className="text-purple-400" /> : <Cloud size={16} className="text-blue-400" />}
-                </div>
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button onClick={() => setEditing(agent)} className="p-1.5 rounded text-gray-500 hover:text-white hover:bg-white/10"><Pencil size={13} /></button>
-                  <button onClick={() => handleDelete(agent.id)} className="p-1.5 rounded text-gray-500 hover:text-red-400 hover:bg-red-500/10"><Trash2 size={13} /></button>
-                </div>
-              </div>
-              <h3 className="font-semibold text-white mb-1">{agent.name}</h3>
-              {agent.description && <p className="text-sm text-gray-400 mb-3 line-clamp-2">{agent.description}</p>}
-              <div className="flex items-center gap-2 mt-auto">
-                <span className={`text-xs px-2 py-0.5 rounded-full ${agent.execution_mode === 'runtime' ? 'bg-purple-500/20 text-purple-400' : 'bg-blue-500/20 text-blue-400'}`}>
-                  {agent.execution_mode}
-                </span>
-                {(agent.provider_name || agent.runtime_name) && (
-                  <span className="text-xs text-gray-500">{agent.provider_name || agent.runtime_name}</span>
-                )}
-                {agent.monthly_budget_usd && (
-                  <span className="text-xs text-gray-600 ml-auto">${agent.monthly_budget_usd}/mo</span>
-                )}
+      {/* Tabs */}
+      <div className="flex gap-1 mb-6 border-b border-[#2a2d35]">
+        {[{ value: 'agents', label: 'My Agents', Icon: Bot }, { value: 'templates', label: 'Templates', Icon: LayoutTemplate }].map(t => (
+          <button
+            key={t.value}
+            onClick={() => setTab(t.value)}
+            className={`flex items-center gap-2 px-4 py-2 text-sm transition-colors border-b-2 -mb-px ${tab === t.value ? 'border-blue-500 text-white' : 'border-transparent text-gray-500 hover:text-gray-300'}`}
+          >
+            <t.Icon size={14} />
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'agents' && (
+        <>
+          {loading ? (
+            <div className="flex items-center justify-center py-20 text-gray-500">
+              <Loader size={20} className="animate-spin mr-2" /> Loading...
+            </div>
+          ) : agents.length === 0 ? (
+            <div className="text-center py-20 text-gray-500">
+              <Bot size={48} className="mx-auto mb-4 opacity-30" />
+              <p className="text-lg font-medium text-gray-400 mb-2">No agents yet</p>
+              <div className="flex items-center justify-center gap-3">
+                <button onClick={() => setModalOpen(true)} className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm">Create Agent</button>
+                <button onClick={() => setTab('templates')} className="px-4 py-2 bg-[#16181c] border border-[#2a2d35] hover:border-blue-500/40 text-gray-300 rounded-lg text-sm flex items-center gap-2">
+                  <LayoutTemplate size={14} /> Browse Templates
+                </button>
               </div>
             </div>
-          ))}
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {agents.filter(a => !search || a.name.toLowerCase().includes(search.toLowerCase()) || (a.description || '').toLowerCase().includes(search.toLowerCase())).map(agent => (
+                <div key={agent.id} className="bg-[#16181c] border border-[#2a2d35] rounded-xl p-5 hover:border-[#3a3d45] transition-colors group">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${agent.execution_mode === 'runtime' ? 'bg-purple-600/20' : 'bg-blue-600/20'}`}>
+                      {agent.execution_mode === 'runtime' ? <Cpu size={16} className="text-purple-400" /> : <Cloud size={16} className="text-blue-400" />}
+                    </div>
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={() => setEditing(agent)} className="p-1.5 rounded text-gray-500 hover:text-white hover:bg-white/10"><Pencil size={13} /></button>
+                      <button onClick={() => handleDelete(agent.id)} className="p-1.5 rounded text-gray-500 hover:text-red-400 hover:bg-red-500/10"><Trash2 size={13} /></button>
+                    </div>
+                  </div>
+                  <h3 className="font-semibold text-white mb-1">{agent.name}</h3>
+                  {agent.description && <p className="text-sm text-gray-400 mb-3 line-clamp-2">{agent.description}</p>}
+                  <div className="flex items-center gap-2 mt-auto">
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${agent.execution_mode === 'runtime' ? 'bg-purple-500/20 text-purple-400' : 'bg-blue-500/20 text-blue-400'}`}>
+                      {agent.execution_mode}
+                    </span>
+                    {(agent.provider_name || agent.runtime_name) && (
+                      <span className="text-xs text-gray-500">{agent.provider_name || agent.runtime_name}</span>
+                    )}
+                    {agent.monthly_budget_usd && (
+                      <span className="text-xs text-gray-600 ml-auto">${agent.monthly_budget_usd}/mo</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {tab === 'templates' && (
+        <div>
+          <p className="text-sm text-gray-400 mb-6">
+            Pre-configured agents ready to deploy. Each template includes a curated system prompt — you can customise it after deployment.
+          </p>
+          {templatesLoading ? (
+            <div className="flex items-center justify-center py-20 text-gray-500">
+              <Loader size={20} className="animate-spin mr-2" /> Loading templates...
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {templates.map(tpl => {
+                const meta = CATEGORY_META[tpl.category] || { label: tpl.category, color: 'text-gray-400', bg: 'bg-gray-500/20' };
+                return (
+                  <div key={tpl.id} className="bg-[#16181c] border border-[#2a2d35] rounded-xl p-5 hover:border-[#3a3d45] transition-colors flex flex-col">
+                    <div className="flex items-start justify-between mb-3">
+                      <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${meta.bg}`}>
+                        <Bot size={16} className={meta.color} />
+                      </div>
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${meta.bg} ${meta.color}`}>{meta.label}</span>
+                    </div>
+                    <h3 className="font-semibold text-white mb-1">{tpl.name}</h3>
+                    <p className="text-sm text-gray-400 mb-4 flex-1 line-clamp-3">{tpl.description}</p>
+                    <button
+                      onClick={() => deployTemplate(tpl)}
+                      disabled={deployingId === tpl.id}
+                      className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600/20 border border-blue-500/30 hover:bg-blue-600/30 hover:border-blue-500/60 text-blue-300 rounded-lg text-sm transition-colors disabled:opacity-50"
+                    >
+                      {deployingId === tpl.id ? <Loader size={14} className="animate-spin" /> : <Download size={14} />}
+                      {deployingId === tpl.id ? 'Deploying…' : 'Deploy Agent'}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
