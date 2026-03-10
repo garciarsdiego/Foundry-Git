@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+*/node_modules/
+
+# Database files
+backend/foundry.db
+backend/foundry.db-shm
+backend/foundry.db-wal
+
+# Build output
+frontend/dist/
+
+# Environment
+.env
+backend/.env
+
+# OS
+.DS_Store
+*.swp
