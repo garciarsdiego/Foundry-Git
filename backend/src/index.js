@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
+import rateLimit from 'express-rate-limit';
 import { getDb } from './db/index.js';
 
 import workspacesRouter from './routes/workspaces.js';
@@ -19,8 +20,16 @@ import settingsRouter from './routes/settings.js';
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 300,            // 300 requests per minute per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 app.use(cors());
 app.use(express.json());
+app.use('/api', apiLimiter);
 
 // Initialize DB on startup
 getDb();

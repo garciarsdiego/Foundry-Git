@@ -96,8 +96,10 @@ export default function RunDetailPage() {
     </div>
   );
 
-  const duration = run.started_at && run.finished_at
-    ? Math.round((new Date(run.finished_at) - new Date(run.started_at)) / 1000)
+  const startMs = run.started_at ? new Date(run.started_at).getTime() : NaN;
+  const endMs = run.finished_at ? new Date(run.finished_at).getTime() : NaN;
+  const duration = !isNaN(startMs) && !isNaN(endMs) && endMs > startMs
+    ? Math.round((endMs - startMs) / 1000)
     : null;
 
   return (
