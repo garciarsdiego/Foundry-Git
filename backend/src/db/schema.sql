@@ -74,7 +74,7 @@ CREATE TABLE IF NOT EXISTS runtime_configs (
   id TEXT PRIMARY KEY,
   workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
-  runtime_type TEXT NOT NULL CHECK(runtime_type IN ('codex','claude-code','gemini-cli','kimi-code','kilo-code')),
+  runtime_type TEXT NOT NULL CHECK(runtime_type IN ('codex','claude-code','gemini-cli','kimi-code','kilo-code','opencode')),
   binary_path TEXT,
   extra_args TEXT,
   is_default INTEGER NOT NULL DEFAULT 0,
@@ -92,6 +92,7 @@ CREATE TABLE IF NOT EXISTS agents (
   execution_mode TEXT NOT NULL DEFAULT 'provider' CHECK(execution_mode IN ('provider','runtime')),
   fallback_provider_config_id TEXT REFERENCES provider_configs(id) ON DELETE SET NULL,
   system_prompt TEXT,
+  monthly_budget_usd REAL,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -101,6 +102,8 @@ CREATE TABLE IF NOT EXISTS teams (
   workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   description TEXT,
+  parent_team_id TEXT REFERENCES teams(id) ON DELETE SET NULL,
+  manager_agent_id TEXT REFERENCES agents(id) ON DELETE SET NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -110,6 +113,7 @@ CREATE TABLE IF NOT EXISTS team_memberships (
   team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
   agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
   role TEXT NOT NULL DEFAULT 'member',
+  title TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE(team_id, agent_id)
 );
@@ -149,6 +153,9 @@ CREATE TABLE IF NOT EXISTS runs (
   worktree_path TEXT,
   pr_number INTEGER,
   pr_url TEXT,
+  tokens_input INTEGER NOT NULL DEFAULT 0,
+  tokens_output INTEGER NOT NULL DEFAULT 0,
+  cost_usd REAL NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -170,6 +177,93 @@ CREATE TABLE IF NOT EXISTS github_connections (
   installation_id TEXT,
   app_id TEXT,
   is_default INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS flows (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+  name TEXT NOT NULL,
+  description TEXT,
+  status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft', 'active', 'archived')),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS flow_steps (
+  id TEXT PRIMARY KEY,
+  flow_id TEXT NOT NULL REFERENCES flows(id) ON DELETE CASCADE,
+  agent_id TEXT REFERENCES agents(id) ON DELETE SET NULL,
+  name TEXT NOT NULL,
+  step_type TEXT NOT NULL DEFAULT 'agent' CHECK(step_type IN ('agent', 'condition', 'parallel')),
+  position INTEGER NOT NULL DEFAULT 0,
+  config_json TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS flow_runs (
+  id TEXT PRIMARY KEY,
+  flow_id TEXT NOT NULL REFERENCES flows(id) ON DELETE CASCADE,
+  project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+  card_id TEXT REFERENCES cards(id) ON DELETE SET NULL,
+  status TEXT NOT NULL DEFAULT 'queued' CHECK(status IN ('queued', 'running', 'success', 'failed', 'cancelled')),
+  current_step_id TEXT REFERENCES flow_steps(id) ON DELETE SET NULL,
+  started_at TEXT,
+  finished_at TEXT,
+  error_message TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS chat_messages (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  agent_id TEXT REFERENCES agents(id) ON DELETE SET NULL,
+  role TEXT NOT NULL CHECK(role IN ('user', 'assistant', 'system')),
+  content TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  tokens_input INTEGER NOT NULL DEFAULT 0,
+  tokens_output INTEGER NOT NULL DEFAULT 0,
+  cost_usd REAL NOT NULL DEFAULT 0,
+  metadata_json TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Skills: reusable system prompt snippets and tool configurations for agents
+CREATE TABLE IF NOT EXISTS skills (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  description TEXT,
+  skill_type TEXT NOT NULL DEFAULT 'system_prompt' CHECK(skill_type IN ('system_prompt', 'mcp', 'tool')),
+  content TEXT,
+  is_public INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS agent_skills (
+  id TEXT PRIMARY KEY,
+  agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+  skill_id TEXT NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(agent_id, skill_id)
+);
+
+-- MCP servers: Model Context Protocol server configurations
+CREATE TABLE IF NOT EXISTS mcp_servers (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  description TEXT,
+  command TEXT NOT NULL,
+  args_json TEXT,
+  env_json TEXT,
+  transport TEXT NOT NULL DEFAULT 'stdio' CHECK(transport IN ('stdio', 'sse', 'http')),
+  is_enabled INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );

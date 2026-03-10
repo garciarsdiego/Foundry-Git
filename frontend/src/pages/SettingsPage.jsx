@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Github, Settings, Loader, Trash2, Pencil, Check } from 'lucide-react';
+import { Plus, Github, Settings, Loader, Trash2, Pencil, Save } from 'lucide-react';
 import api from '../components/api.js';
 import Modal from '../components/Modal.jsx';
 import ConfirmModal from '../components/ConfirmModal.jsx';
@@ -71,11 +71,15 @@ export default function SettingsPage() {
   const [ghModal, setGhModal] = useState(false);
   const [editingConn, setEditingConn] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [editingWsName, setEditingWsName] = useState(false);
+  const [wsName, setWsName] = useState('');
+  const [savingWs, setSavingWs] = useState(false);
 
   async function load() {
     try {
       const data = await api.get('/settings');
       setSettings(data);
+      setWsName(data.workspace?.name || '');
     } catch (e) {
       console.error(e);
     } finally {
@@ -84,6 +88,20 @@ export default function SettingsPage() {
   }
 
   useEffect(() => { load(); }, []);
+
+  async function handleSaveWsName() {
+    if (!wsName.trim()) return;
+    setSavingWs(true);
+    try {
+      await api.put('/settings/workspace', { name: wsName.trim() });
+      setEditingWsName(false);
+      load();
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setSavingWs(false);
+    }
+  }
 
   async function handleCreateConn(data) {
     await api.post('/github/connections', data);
@@ -126,7 +144,28 @@ export default function SettingsPage() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <div className="text-xs text-gray-500 mb-1">Name</div>
-              <div className="text-sm text-white">{settings.workspace.name}</div>
+              {editingWsName ? (
+                <div className="flex items-center gap-2">
+                  <input
+                    value={wsName}
+                    onChange={e => setWsName(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleSaveWsName()}
+                    autoFocus
+                    className="flex-1 bg-[#0d0d0f] border border-blue-500 rounded-lg px-2 py-1 text-white text-sm focus:outline-none"
+                  />
+                  <button onClick={handleSaveWsName} disabled={savingWs} className="p-1.5 text-green-400 hover:text-green-300 hover:bg-green-500/10 rounded-lg transition-colors">
+                    {savingWs ? <Loader size={12} className="animate-spin" /> : <Save size={13} />}
+                  </button>
+                  <button onClick={() => { setEditingWsName(false); setWsName(settings.workspace.name); }} className="p-1.5 text-gray-500 hover:text-white hover:bg-white/5 rounded-lg transition-colors text-xs">✕</button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 group">
+                  <div className="text-sm text-white">{settings.workspace.name}</div>
+                  <button onClick={() => setEditingWsName(true)} className="p-1 text-gray-600 hover:text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity rounded">
+                    <Pencil size={12} />
+                  </button>
+                </div>
+              )}
             </div>
             <div>
               <div className="text-xs text-gray-500 mb-1">Slug</div>

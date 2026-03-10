@@ -6,6 +6,12 @@ node_modules/
 backend/foundry.db
 backend/foundry.db-shm
 backend/foundry.db-wal
+foundry.db
+foundry.db-shm
+foundry.db-wal
+*.db
+*.db-shm
+*.db-wal
 
 # Build output
 frontend/dist/

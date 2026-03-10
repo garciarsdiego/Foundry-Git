@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Bot, Loader, Pencil, Trash2, Cpu, Cloud } from 'lucide-react';
+import { Plus, Bot, Loader, Pencil, Trash2, Cpu, Cloud, Search } from 'lucide-react';
 import api from '../components/api.js';
 import Modal from '../components/Modal.jsx';
 import ConfirmModal from '../components/ConfirmModal.jsx';
@@ -15,6 +15,7 @@ function AgentForm({ initial = {}, providers, runtimes, onSubmit, onCancel }) {
     runtime_config_id: initial.runtime_config_id || '',
     fallback_provider_config_id: initial.fallback_provider_config_id || '',
     system_prompt: initial.system_prompt || '',
+    monthly_budget_usd: initial.monthly_budget_usd !== null && initial.monthly_budget_usd !== undefined ? String(initial.monthly_budget_usd) : '',
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -27,7 +28,11 @@ function AgentForm({ initial = {}, providers, runtimes, onSubmit, onCancel }) {
     setSaving(true);
     setError('');
     try {
-      await onSubmit(form);
+      const payload = {
+        ...form,
+        monthly_budget_usd: form.monthly_budget_usd ? parseFloat(form.monthly_budget_usd) : null,
+      };
+      await onSubmit(payload);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -81,6 +86,14 @@ function AgentForm({ initial = {}, providers, runtimes, onSubmit, onCancel }) {
         <label className="block text-sm text-gray-400 mb-1">System Prompt</label>
         <textarea value={form.system_prompt} onChange={set('system_prompt')} rows={3} placeholder="You are a helpful coding assistant..." className="w-full bg-[#0d0d0f] border border-[#2a2d35] rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 resize-none" />
       </div>
+      <div>
+        <label className="block text-sm text-gray-400 mb-1">Monthly Budget (USD) <span className="text-gray-600">optional</span></label>
+        <div className="relative">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
+          <input type="number" min="0" step="0.01" value={form.monthly_budget_usd} onChange={set('monthly_budget_usd')} placeholder="e.g. 10.00" className="w-full bg-[#0d0d0f] border border-[#2a2d35] rounded-lg pl-7 pr-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500" />
+        </div>
+        <p className="text-xs text-gray-600 mt-1">Agent will show a budget warning when spending approaches this limit.</p>
+      </div>
       <div className="flex justify-end gap-3 pt-2">
         <button type="button" onClick={onCancel} className="px-4 py-2 text-sm text-gray-400 hover:text-white">Cancel</button>
         <button type="submit" disabled={saving} className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-500 text-white rounded-lg disabled:opacity-50">
@@ -100,6 +113,7 @@ export default function AgentsPage() {
   const [editing, setEditing] = useState(null);
   const [workspaceId, setWorkspaceId] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [search, setSearch] = useState('');
 
   async function load() {
     try {
@@ -150,9 +164,20 @@ export default function AgentsPage() {
           <h1 className="text-2xl font-bold text-white">Agents</h1>
           <p className="text-gray-400 mt-1">Configure AI agents powered by providers or runtime CLIs</p>
         </div>
-        <button onClick={() => setModalOpen(true)} className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm transition-colors">
-          <Plus size={16} /> New Agent
-        </button>
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search agents…"
+              className="pl-9 pr-3 py-2 bg-[#16181c] border border-[#2a2d35] rounded-lg text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500 w-48"
+            />
+          </div>
+          <button onClick={() => setModalOpen(true)} className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm transition-colors">
+            <Plus size={16} /> New Agent
+          </button>
+        </div>
       </div>
 
       {loading ? (
@@ -167,7 +192,7 @@ export default function AgentsPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {agents.map(agent => (
+          {agents.filter(a => !search || a.name.toLowerCase().includes(search.toLowerCase()) || (a.description || '').toLowerCase().includes(search.toLowerCase())).map(agent => (
             <div key={agent.id} className="bg-[#16181c] border border-[#2a2d35] rounded-xl p-5 hover:border-[#3a3d45] transition-colors group">
               <div className="flex items-start justify-between mb-3">
                 <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${agent.execution_mode === 'runtime' ? 'bg-purple-600/20' : 'bg-blue-600/20'}`}>
@@ -186,6 +211,9 @@ export default function AgentsPage() {
                 </span>
                 {(agent.provider_name || agent.runtime_name) && (
                   <span className="text-xs text-gray-500">{agent.provider_name || agent.runtime_name}</span>
+                )}
+                {agent.monthly_budget_usd && (
+                  <span className="text-xs text-gray-600 ml-auto">${agent.monthly_budget_usd}/mo</span>
                 )}
               </div>
             </div>

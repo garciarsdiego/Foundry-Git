@@ -17,6 +17,7 @@ export function getDb() {
     db.pragma('journal_mode = WAL');
     db.pragma('foreign_keys = ON');
     initializeSchema();
+    runMigrations();
     seedDefaultData();
   }
   return db;
@@ -25,6 +26,68 @@ export function getDb() {
 function initializeSchema() {
   const schema = readFileSync(join(__dirname, 'schema.sql'), 'utf8');
   db.exec(schema);
+}
+
+/**
+ * Runs incremental migrations for existing databases.
+ * SQLite does not support ALTER TABLE ... MODIFY COLUMN, so we handle
+ * CHECK constraint expansions by recreating the table when needed.
+ * Column additions are done with ALTER TABLE ... ADD COLUMN (idempotent via try/catch).
+ */
+function runMigrations() {
+  // Helper: add a column if it doesn't exist yet
+  function addColumnIfMissing(table, column, definition) {
+    try {
+      db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    } catch (_) {
+      // Column already exists — no-op
+    }
+  }
+
+  // runtime_configs: add 'opencode' to CHECK constraint if missing
+  const rtTableInfo = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='runtime_configs'").get();
+  if (rtTableInfo?.sql && !rtTableInfo.sql.includes("'opencode'")) {
+    db.exec(`
+      ALTER TABLE runtime_configs RENAME TO runtime_configs_old;
+      CREATE TABLE runtime_configs (
+        id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        runtime_type TEXT NOT NULL CHECK(runtime_type IN ('codex','claude-code','gemini-cli','kimi-code','kilo-code','opencode')),
+        binary_path TEXT,
+        extra_args TEXT,
+        is_default INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      INSERT INTO runtime_configs SELECT * FROM runtime_configs_old;
+      DROP TABLE runtime_configs_old;
+    `);
+    console.log('Migration: runtime_configs CHECK constraint updated to include opencode.');
+  }
+
+  // runs: add token/cost columns
+  addColumnIfMissing('runs', 'tokens_input', 'INTEGER NOT NULL DEFAULT 0');
+  addColumnIfMissing('runs', 'tokens_output', 'INTEGER NOT NULL DEFAULT 0');
+  addColumnIfMissing('runs', 'cost_usd', 'REAL NOT NULL DEFAULT 0');
+
+  // agents: add monthly budget
+  addColumnIfMissing('agents', 'monthly_budget_usd', 'REAL');
+
+  // teams: add hierarchy and manager
+  addColumnIfMissing('teams', 'parent_team_id', 'TEXT REFERENCES teams(id) ON DELETE SET NULL');
+  addColumnIfMissing('teams', 'manager_agent_id', 'TEXT REFERENCES agents(id) ON DELETE SET NULL');
+
+  // team_memberships: add title
+  addColumnIfMissing('team_memberships', 'title', 'TEXT');
+
+  // chat_messages: add token/cost columns
+  addColumnIfMissing('chat_messages', 'tokens_input', 'INTEGER NOT NULL DEFAULT 0');
+  addColumnIfMissing('chat_messages', 'tokens_output', 'INTEGER NOT NULL DEFAULT 0');
+  addColumnIfMissing('chat_messages', 'cost_usd', 'REAL NOT NULL DEFAULT 0');
+
+  // skills and agent_skills are created by schema.sql via CREATE TABLE IF NOT EXISTS
+  // mcp_servers is created by schema.sql via CREATE TABLE IF NOT EXISTS
 }
 
 function seedDefaultData() {
