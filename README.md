@@ -74,21 +74,24 @@ npm run start:frontend
 
 | Path | Component | Description |
 |------|-----------|-------------|
-| `/` | DashboardPage | Stats overview and recent runs |
+| `/` | DashboardPage | Stats overview, recent runs, and analytics charts |
 | `/projects` | ProjectsPage | List/create projects with GitHub repo binding |
 | `/projects/:id` | ProjectDetailPage | Project detail with run history |
 | `/projects/:id/board` | BoardPage | Kanban board with drag-and-drop card movement |
 | `/projects/:id/board/:taskId` | TaskDetailPage | Task detail with run creation |
-| `/agents` | AgentsPage | Agent configuration (provider or runtime mode) |
+| `/agents` | AgentsPage | Agent configuration (provider or runtime mode) with memory management |
+| `/companies` | CompaniesPage | Company/client CRM with project associations |
 | `/teams` | TeamsPage | Team management with agent membership |
 | `/runtimes` | RuntimesPage | CLI runtime configurations |
 | `/providers` | ProvidersPage | AI provider API configurations |
 | `/queue` | QueuePage | Run queue with status filtering |
 | `/runs/:runId` | RunDetailPage | Run detail with live event log |
-| `/settings` | SettingsPage | Workspace settings and GitHub connections |
+| `/settings` | SettingsPage | Workspace settings, GitHub connections, webhooks, user management |
 | `/chat` | ChatPage | Chat interface with agent selection |
 | `/flows` | FlowsPage | Multi-agent flow list |
-| `/flows/:id` | FlowDetailPage | Flow editor with step management and run history |
+| `/flows/:id` | FlowDetailPage | Flow editor — list view + visual canvas editor with drag-and-drop nodes |
+| `/skills` | SkillsPage | Reusable skill snippets (system prompts, tools, MCP) |
+| `/mcp` | McpPage | MCP server configurations |
 
 ## API Endpoints
 
@@ -100,11 +103,13 @@ npm run start:frontend
 | GET/POST/PUT/DELETE | `/api/cards` | Card CRUD |
 | POST | `/api/cards/:id/run` | Create run from card |
 | GET/POST/PUT/DELETE | `/api/agents` | Agent CRUD |
+| GET/POST/PUT/DELETE | `/api/agents/:id/memories` | Agent memory CRUD |
 | GET/POST/PUT/DELETE | `/api/teams` | Team CRUD + memberships |
 | GET/POST/PUT/DELETE | `/api/runtimes` | Runtime config CRUD |
-| GET/POST/PUT/DELETE | `/api/providers` | Provider config CRUD |
+| GET/POST/PUT/DELETE | `/api/providers` | Provider config CRUD (API key masked in responses) |
 | GET | `/api/runs` | List runs (filterable by project/status/agent) |
 | GET | `/api/runs/:id` | Run detail with events |
+| GET | `/api/runs/stats/costs` | Cost & token analytics by day and agent |
 | POST | `/api/runs/:id/cancel` | Cancel a run |
 | POST | `/api/execute` | Execute a card with an agent |
 | GET/POST/PUT/DELETE | `/api/github/connections` | GitHub connection CRUD |
@@ -113,9 +118,9 @@ npm run start:frontend
 | GET | `/api/github/repos/:connectionId/:owner/:repo` | Inspect a specific repo |
 | POST | `/api/github/branch/:projectId/:runId` | Create branch for a run |
 | POST | `/api/github/pr/:runId` | Create PR for a run |
-| GET | `/api/settings` | Workspace settings summary |
+| GET/PUT | `/api/settings` | Workspace settings summary (webhook secrets masked) |
 | GET | `/api/health` | Health check |
-| GET/POST/PUT/DELETE | `/api/flows` | Flow CRUD |
+| GET/POST/PUT/DELETE | `/api/flows` | Flow CRUD (includes `canvas_layout_json` for visual editor) |
 | GET/POST/PUT/DELETE | `/api/flows/:id/steps` | Flow step management |
 | PUT | `/api/flows/:id/steps/reorder` | Reorder flow steps |
 | POST | `/api/flows/:id/run` | Execute a flow against a card |
@@ -123,6 +128,15 @@ npm run start:frontend
 | POST | `/api/chat` | Send chat message (real AI or simulated) |
 | GET | `/api/chat/sessions/:sessionId` | Get chat session history |
 | GET | `/api/chat/sessions` | List recent chat sessions |
+| GET/POST/PUT/DELETE | `/api/webhooks` | Webhook config CRUD (secret masked in responses) |
+| POST | `/api/webhooks/receive/:id` | Public GitHub webhook receiver (HMAC-SHA256 verified) |
+| GET/POST/PUT/DELETE | `/api/companies` | Company/client CRM CRUD |
+| POST/DELETE | `/api/companies/:id/projects` | Associate/disassociate project with company |
+| GET | `/api/auth/status` | Auth enabled/disabled check |
+| POST | `/api/auth/login` | Login (returns JWT) |
+| GET/POST/PUT/DELETE | `/api/auth/users` | User management (admin only) |
+| GET/POST/PUT/DELETE | `/api/skills` | Skills CRUD + catalog |
+| GET/POST/PUT/DELETE | `/api/mcp` | MCP server CRUD |
 
 ## Entity Model
 
@@ -136,6 +150,7 @@ npm run start:frontend
 | **BoardColumn** | Column within a board (Todo, In Progress, Review, Done) |
 | **Card** | Task on the board; can have a GitHub issue and an assigned agent |
 | **Agent** | An AI agent config with execution mode, provider/runtime, and optional fallback |
+| **AgentMemory** | Persistent key-value context entry for an agent; injected into chat |
 | **Team** | Group of agents with roles |
 | **Run** | A single execution of an agent on a card; tracks status and events |
 | **RunEvent** | Log entry for a run (stdout, api_call, error, etc.) |
@@ -143,6 +158,13 @@ npm run start:frontend
 | **RuntimeConfig** | CLI runtime settings (Codex CLI, Claude Code, etc.) |
 | **GithubConnection** | GitHub credentials for repo access |
 | **ExecutionPolicy** | Retry/timeout/fallback policy |
+| **Flow** | Multi-step agent pipeline with optional visual canvas layout |
+| **FlowStep** | A single step within a flow (agent, condition, or parallel) |
+| **WebhookConfig** | GitHub webhook trigger for flows; HMAC-SHA256 verified |
+| **Company** | Client/organization record with contact details |
+| **User** | Authenticated user account (admin/member/viewer roles) |
+| **Skill** | Reusable system prompt snippet, tool config, or MCP reference |
+| **McpServer** | Model Context Protocol server configuration |
 
 ## Runtime vs Provider
 
@@ -184,7 +206,7 @@ Any agent can have a `fallback_provider_config_id`. If runtime execution fails, 
 - ✅ Execution service with real subprocess invocation for CLI runtimes (falls back to simulation if binary not installed)
 - ✅ Per-runtime non-interactive invocation flags (`claude -p`, `opencode run`, `gemini -p`, `codex` positional)
 - ✅ OpenCode runtime support with [oh-my-openagent](https://github.com/code-yeongyu/oh-my-openagent) compatibility
-- ✅ Real provider API calls for OpenAI, Anthropic, Google Gemini, OpenRouter, Groq, NVIDIA NIM, and Kimi (Moonshot AI)
+- ✅ Real provider API calls for OpenAI, Anthropic, Google Gemini, OpenRouter, Groq, NVIDIA NIM, Kimi (Moonshot AI), MiniMax, and GLM/Z.ai
 - ✅ Execution policy enforcement: per-workspace retry and timeout configuration applied during dispatch
 - ✅ Real GitHub integration via Octokit: issue sync, branch creation, PR creation, repo listing
 - ✅ **SSE streaming** — `GET /api/runs/:id/stream` pushes run events to the browser in real-time via EventSource
@@ -196,22 +218,20 @@ Any agent can have a `fallback_provider_config_id`. If runtime execution fails, 
 - ✅ Run detail page with **live SSE event streaming** (no more polling)
 - ✅ Dark theme UI throughout
 - ✅ Default workspace seed data on first run
-- ✅ **Chat interface**: session history sidebar, load past conversations, select agents, real AI responses (OpenAI, Anthropic, Google, OpenRouter) or simulated fallback; auto-expanding textarea with Shift+Enter for newlines
+- ✅ **Chat interface**: session history sidebar, load past conversations, select agents, real AI responses (OpenAI, Anthropic, Google, OpenRouter, Groq, NVIDIA NIM, Kimi, MiniMax, GLM) or simulated fallback; auto-expanding textarea with Shift+Enter for newlines
 - ✅ Flow builder: create multi-agent step pipelines, run flows against cards, view run history
+- ✅ **Visual canvas flow editor** — drag nodes on a scrollable canvas; positions persisted in DB
 - ✅ Skills system: reusable system prompt snippets, tool configs, MCP references
 - ✅ MCP server configuration with Quick Start presets
 - ✅ Token & cost tracking per run and chat message
 - ✅ Agent monthly budget enforcement with dashboard cost progress bars
 - ✅ Hierarchic teams with org chart view
 - ✅ **Direct API key entry** in the Providers UI — paste the key directly or reference a server-side env var; key is masked in all API responses
-
-## TODO / Future Work
-
-- [ ] Multi-user accounts (currently single admin)
-- [ ] Webhook support for GitHub event-driven runs
-- [ ] Visual drag-and-drop flow editor (currently step-list based)
-- [ ] MiniMax, GLM/Z.ai, NVIDIA NIM, and Kimi provider dispatch in chat (currently simulated unless API key is configured)
-- [ ] Metrics and analytics charts
+- ✅ **Webhook support** — configure GitHub webhooks to trigger flows; HMAC-SHA256 signature verification; secret masked in all API responses
+- ✅ **Multi-user accounts** — create admin/member/viewer users; JWT login per user; user management in Settings
+- ✅ **Company/client CRM** — manage companies and associate them with projects
+- ✅ **Agent memories** — persistent key-value memory store per agent; injected into chat context; full UI to view, add, edit and delete memories
+- ✅ **Metrics and analytics charts** — daily cost & token sparkline charts on the Dashboard
 
 ## Configuration
 
