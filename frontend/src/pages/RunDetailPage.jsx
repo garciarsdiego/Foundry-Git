@@ -135,10 +135,10 @@ export default function RunDetailPage() {
       </div>
 
       {/* Run details grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
         {[
           { label: 'Status', value: <StatusBadge status={run.status} /> },
-          { label: 'Runtime Type', value: run.runtime_type || run.provider_type || '—' },
+          { label: 'Runtime / Provider', value: run.runtime_type || run.provider_type || '—' },
           { label: 'Duration', value: duration !== null ? `${duration}s` : '—' },
           { label: 'Exit Code', value: run.exit_code !== null ? String(run.exit_code) : '—' },
         ].map(item => (
@@ -148,6 +148,24 @@ export default function RunDetailPage() {
           </div>
         ))}
       </div>
+
+      {/* Token & cost row */}
+      {(run.tokens_input > 0 || run.tokens_output > 0 || run.cost_usd > 0) && (
+        <div className="grid grid-cols-3 gap-4 mb-6">
+          <div className="bg-[#16181c] border border-[#2a2d35] rounded-xl p-4">
+            <div className="text-xs text-gray-500 mb-2">Input Tokens</div>
+            <div className="text-sm font-mono text-blue-300">{run.tokens_input?.toLocaleString() || 0}</div>
+          </div>
+          <div className="bg-[#16181c] border border-[#2a2d35] rounded-xl p-4">
+            <div className="text-xs text-gray-500 mb-2">Output Tokens</div>
+            <div className="text-sm font-mono text-purple-300">{run.tokens_output?.toLocaleString() || 0}</div>
+          </div>
+          <div className="bg-[#16181c] border border-[#2a2d35] rounded-xl p-4">
+            <div className="text-xs text-gray-500 mb-2">Estimated Cost</div>
+            <div className="text-sm font-mono text-green-300">${(run.cost_usd || 0).toFixed(6)}</div>
+          </div>
+        </div>
+      )}
 
       {run.error_message && (
         <div className="mb-6 bg-red-500/10 border border-red-500/20 rounded-xl p-4">

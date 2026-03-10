@@ -1,0 +1,258 @@
+import React, { useState, useEffect } from 'react';
+import { Plus, Zap, Loader, Pencil, Trash2, Wrench, Server } from 'lucide-react';
+import api from '../components/api.js';
+import Modal from '../components/Modal.jsx';
+import ConfirmModal from '../components/ConfirmModal.jsx';
+import { useToast } from '../components/Toast.jsx';
+
+const SKILL_TYPES = [
+  { value: 'system_prompt', label: 'System Prompt', icon: Zap, color: 'text-yellow-400', bg: 'bg-yellow-500/20', description: 'Reusable system prompt snippet injected into the agent context' },
+  { value: 'tool', label: 'Tool Config', icon: Wrench, color: 'text-blue-400', bg: 'bg-blue-500/20', description: 'Tool definition (JSON schema) available to the agent' },
+  { value: 'mcp', label: 'MCP Reference', icon: Server, color: 'text-purple-400', bg: 'bg-purple-500/20', description: 'Reference to an MCP server providing tools/resources' },
+];
+
+const SKILL_EXAMPLES = {
+  system_prompt: `You are an expert code reviewer. When reviewing code:
+- Focus on correctness, performance, and security
+- Provide specific, actionable feedback
+- Reference line numbers in your comments
+- Suggest tests for edge cases`,
+  tool: `{
+  "name": "read_file",
+  "description": "Read contents of a file",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "path": { "type": "string", "description": "File path to read" }
+    },
+    "required": ["path"]
+  }
+}`,
+  mcp: `{
+  "server": "github",
+  "capabilities": ["list_repos", "create_issue", "search_code"]
+}`,
+};
+
+function SkillForm({ initial = {}, onSubmit, onCancel, saving }) {
+  const [form, setForm] = useState({
+    name: initial.name || '',
+    description: initial.description || '',
+    skill_type: initial.skill_type || 'system_prompt',
+    content: initial.content || '',
+    is_public: initial.is_public || false,
+  });
+
+  const typeMeta = SKILL_TYPES.find(t => t.value === form.skill_type);
+
+  function handleSubmit(e) {
+    e.preventDefault();
+    if (!form.name.trim()) return;
+    onSubmit(form);
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
+        <label className="block text-sm text-gray-400 mb-1">Name *</label>
+        <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Code Reviewer" className="w-full bg-[#0d0d0f] border border-[#2a2d35] rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500" />
+      </div>
+      <div>
+        <label className="block text-sm text-gray-400 mb-1">Skill Type *</label>
+        <div className="grid grid-cols-3 gap-2">
+          {SKILL_TYPES.map(t => {
+            const Icon = t.icon;
+            return (
+              <button
+                key={t.value}
+                type="button"
+                onClick={() => setForm(f => {
+                  const prevExample = SKILL_EXAMPLES[f.skill_type] || '';
+                  const shouldReplaceContent = !f.content || f.content.trim() === prevExample.trim();
+                  return { ...f, skill_type: t.value, content: shouldReplaceContent ? SKILL_EXAMPLES[t.value] : f.content };
+                })}
+                className={`flex flex-col items-center gap-1.5 p-3 rounded-lg border text-xs transition-colors ${form.skill_type === t.value ? 'border-blue-500 bg-blue-500/10 text-white' : 'border-[#2a2d35] text-gray-400 hover:border-[#3a3d45]'}`}
+              >
+                <Icon size={16} className={form.skill_type === t.value ? t.color : ''} />
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
+        {typeMeta && <p className="text-xs text-gray-500 mt-2">{typeMeta.description}</p>}
+      </div>
+      <div>
+        <label className="block text-sm text-gray-400 mb-1">Description</label>
+        <input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="What does this skill do?" className="w-full bg-[#0d0d0f] border border-[#2a2d35] rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500" />
+      </div>
+      <div>
+        <label className="block text-sm text-gray-400 mb-1">Content</label>
+        <textarea
+          value={form.content}
+          onChange={e => setForm(f => ({ ...f, content: e.target.value }))}
+          rows={8}
+          className="w-full bg-[#0d0d0f] border border-[#2a2d35] rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 resize-none font-mono"
+          placeholder={SKILL_EXAMPLES[form.skill_type]}
+        />
+      </div>
+      <div className="flex items-center gap-2">
+        <input type="checkbox" id="is_public" checked={!!form.is_public} onChange={e => setForm(f => ({ ...f, is_public: e.target.checked }))} />
+        <label htmlFor="is_public" className="text-sm text-gray-400">Share in Skills Marketplace</label>
+      </div>
+      <div className="flex justify-end gap-3 pt-2">
+        <button type="button" onClick={onCancel} className="px-4 py-2 text-sm text-gray-400 hover:text-white">Cancel</button>
+        <button type="submit" disabled={saving} className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-500 text-white rounded-lg disabled:opacity-50">
+          {saving ? 'Saving...' : initial.id ? 'Update Skill' : 'Create Skill'}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+export default function SkillsPage() {
+  const [skills, setSkills] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [workspaceId, setWorkspaceId] = useState('');
+  const [filter, setFilter] = useState('all');
+  const toast = useToast();
+
+  async function load() {
+    try {
+      const [ws, data] = await Promise.all([api.get('/workspaces'), api.get('/skills')]);
+      setWorkspaceId(ws[0]?.id || '');
+      setSkills(data);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { load(); }, []);
+
+  async function handleCreate(form) {
+    setSaving(true);
+    try {
+      await api.post('/skills', { ...form, workspace_id: workspaceId });
+      setModalOpen(false);
+      load();
+    } catch (err) {
+      toast(err.message, 'error');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleEdit(form) {
+    setSaving(true);
+    try {
+      await api.put(`/skills/${editing.id}`, form);
+      setEditing(null);
+      load();
+    } catch (err) {
+      toast(err.message, 'error');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete() {
+    try {
+      await api.delete(`/skills/${confirmDelete}`);
+      setConfirmDelete(null);
+      load();
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  }
+
+  const filtered = filter === 'all' ? skills : skills.filter(s => s.skill_type === filter);
+
+  return (
+    <div className="p-6 max-w-6xl mx-auto">
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Skills</h1>
+          <p className="text-gray-400 mt-1">Reusable capabilities — system prompts, tools, and MCP references</p>
+        </div>
+        <button onClick={() => setModalOpen(true)} className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm transition-colors">
+          <Plus size={16} /> New Skill
+        </button>
+      </div>
+
+      {/* Filter tabs */}
+      <div className="flex gap-1 mb-6 border-b border-[#2a2d35]">
+        {[{ value: 'all', label: 'All' }, ...SKILL_TYPES.map(t => ({ value: t.value, label: t.label }))].map(tab => (
+          <button
+            key={tab.value}
+            onClick={() => setFilter(tab.value)}
+            className={`px-4 py-2 text-sm transition-colors border-b-2 -mb-px ${filter === tab.value ? 'border-blue-500 text-white' : 'border-transparent text-gray-500 hover:text-gray-300'}`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center py-20 text-gray-500">
+          <Loader size={20} className="animate-spin mr-2" /> Loading...
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-20 text-gray-500">
+          <Zap size={48} className="mx-auto mb-4 opacity-30" />
+          <p className="text-lg font-medium text-gray-400 mb-2">No skills yet</p>
+          <p className="text-sm text-gray-600 mb-4">Skills are reusable capabilities that can be assigned to agents — system prompt templates, tool configs, and MCP server references.</p>
+          <button onClick={() => setModalOpen(true)} className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm">Create Skill</button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filtered.map(skill => {
+            const meta = SKILL_TYPES.find(t => t.value === skill.skill_type);
+            const Icon = meta?.icon || Zap;
+            return (
+              <div key={skill.id} className="bg-[#16181c] border border-[#2a2d35] rounded-xl p-5 hover:border-[#3a3d45] transition-colors group">
+                <div className="flex items-start justify-between mb-3">
+                  <div className={`w-9 h-9 rounded-lg ${meta?.bg || 'bg-gray-500/20'} flex items-center justify-center`}>
+                    <Icon size={16} className={meta?.color || 'text-gray-400'} />
+                  </div>
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button onClick={() => { setEditing(skill); }} className="p-1.5 rounded text-gray-500 hover:text-white hover:bg-white/10"><Pencil size={13} /></button>
+                    <button onClick={() => setConfirmDelete(skill.id)} className="p-1.5 rounded text-gray-500 hover:text-red-400 hover:bg-red-500/10"><Trash2 size={13} /></button>
+                  </div>
+                </div>
+                <h3 className="font-semibold text-white mb-1">{skill.name}</h3>
+                {skill.description && <p className="text-sm text-gray-400 line-clamp-2 mb-3">{skill.description}</p>}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${meta?.bg || 'bg-gray-500/20'} ${meta?.color || 'text-gray-400'}`}>{meta?.label || skill.skill_type}</span>
+                  {skill.is_public ? <span className="text-xs px-2 py-0.5 rounded-full bg-green-500/20 text-green-400">marketplace</span> : null}
+                </div>
+                {skill.content && (
+                  <pre className="mt-3 text-xs text-gray-600 font-mono bg-black/20 rounded p-2 line-clamp-3 overflow-hidden">{skill.content}</pre>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title="Create Skill" size="lg">
+        <SkillForm onSubmit={handleCreate} onCancel={() => setModalOpen(false)} saving={saving} />
+      </Modal>
+      <Modal isOpen={!!editing} onClose={() => setEditing(null)} title="Edit Skill" size="lg">
+        {editing && <SkillForm initial={editing} onSubmit={handleEdit} onCancel={() => setEditing(null)} saving={saving} />}
+      </Modal>
+      <ConfirmModal
+        isOpen={!!confirmDelete}
+        onClose={() => setConfirmDelete(null)}
+        onConfirm={handleDelete}
+        title="Delete Skill"
+        message="Are you sure you want to delete this skill? It will be removed from all agents."
+        confirmLabel="Delete Skill"
+      />
+    </div>
+  );
+}

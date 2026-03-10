@@ -18,6 +18,8 @@ import ChatPage from './pages/ChatPage.jsx';
 import FlowsPage from './pages/FlowsPage.jsx';
 import FlowBuilderPage from './pages/FlowBuilderPage.jsx';
 import FlowDetailPage from './pages/FlowDetailPage.jsx';
+import SkillsPage from './pages/SkillsPage.jsx';
+import McpPage from './pages/McpPage.jsx';
 
 export default function App() {
   return (
@@ -41,6 +43,8 @@ export default function App() {
           <Route path="flows" element={<FlowsPage />} />
           <Route path="flows/new" element={<FlowBuilderPage />} />
           <Route path="flows/:id" element={<FlowDetailPage />} />
+          <Route path="skills" element={<SkillsPage />} />
+          <Route path="mcp" element={<McpPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

@@ -3,7 +3,7 @@ import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, FolderKanban, Bot, Users, Cpu, Cloud,
   PlaySquare, Settings, MessageSquare, Workflow, ChevronLeft,
-  ChevronRight, Zap, Menu
+  ChevronRight, Zap, Server
 } from 'lucide-react';
 
 const navItems = [
@@ -13,6 +13,8 @@ const navItems = [
   { to: '/teams', icon: Users, label: 'Teams' },
   { to: '/runtimes', icon: Cpu, label: 'Runtimes' },
   { to: '/providers', icon: Cloud, label: 'Providers' },
+  { to: '/skills', icon: Zap, label: 'Skills' },
+  { to: '/mcp', icon: Server, label: 'MCP' },
   { to: '/queue', icon: PlaySquare, label: 'Queue' },
   { to: '/chat', icon: MessageSquare, label: 'Chat' },
   { to: '/flows', icon: Workflow, label: 'Flows' },

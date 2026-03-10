@@ -92,6 +92,7 @@ CREATE TABLE IF NOT EXISTS agents (
   execution_mode TEXT NOT NULL DEFAULT 'provider' CHECK(execution_mode IN ('provider','runtime')),
   fallback_provider_config_id TEXT REFERENCES provider_configs(id) ON DELETE SET NULL,
   system_prompt TEXT,
+  monthly_budget_usd REAL,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -101,6 +102,8 @@ CREATE TABLE IF NOT EXISTS teams (
   workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   description TEXT,
+  parent_team_id TEXT REFERENCES teams(id) ON DELETE SET NULL,
+  manager_agent_id TEXT REFERENCES agents(id) ON DELETE SET NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -110,6 +113,7 @@ CREATE TABLE IF NOT EXISTS team_memberships (
   team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
   agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
   role TEXT NOT NULL DEFAULT 'member',
+  title TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE(team_id, agent_id)
 );
@@ -149,6 +153,9 @@ CREATE TABLE IF NOT EXISTS runs (
   worktree_path TEXT,
   pr_number INTEGER,
   pr_url TEXT,
+  tokens_input INTEGER NOT NULL DEFAULT 0,
+  tokens_output INTEGER NOT NULL DEFAULT 0,
+  cost_usd REAL NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -218,6 +225,45 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   role TEXT NOT NULL CHECK(role IN ('user', 'assistant', 'system')),
   content TEXT NOT NULL,
   session_id TEXT NOT NULL,
+  tokens_input INTEGER NOT NULL DEFAULT 0,
+  tokens_output INTEGER NOT NULL DEFAULT 0,
+  cost_usd REAL NOT NULL DEFAULT 0,
   metadata_json TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Skills: reusable system prompt snippets and tool configurations for agents
+CREATE TABLE IF NOT EXISTS skills (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  description TEXT,
+  skill_type TEXT NOT NULL DEFAULT 'system_prompt' CHECK(skill_type IN ('system_prompt', 'mcp', 'tool')),
+  content TEXT,
+  is_public INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS agent_skills (
+  id TEXT PRIMARY KEY,
+  agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+  skill_id TEXT NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(agent_id, skill_id)
+);
+
+-- MCP servers: Model Context Protocol server configurations
+CREATE TABLE IF NOT EXISTS mcp_servers (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  description TEXT,
+  command TEXT NOT NULL,
+  args_json TEXT,
+  env_json TEXT,
+  transport TEXT NOT NULL DEFAULT 'stdio' CHECK(transport IN ('stdio', 'sse', 'http')),
+  is_enabled INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );

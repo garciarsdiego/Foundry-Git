@@ -291,13 +291,18 @@ async function openaiDispatch(run, agent, providerConfig, card, apiKey) {
 
   const data = await response.json();
   const content = data.choices?.[0]?.message?.content || '';
+  const tokensIn = data.usage?.prompt_tokens || 0;
+  const tokensOut = data.usage?.completion_tokens || 0;
+  const costUsd = estimateCost(model, tokensIn, tokensOut);
 
-  await logEvent(run.id, 'api_response', 'Received response from OpenAI');
+  await logEvent(run.id, 'api_response', `Received response from OpenAI (${tokensIn} in / ${tokensOut} out tokens, $${costUsd.toFixed(6)})`);
   await logEvent(run.id, 'stdout', content);
 
   db.prepare(`
-    UPDATE runs SET status = 'success', finished_at = datetime('now'), exit_code = 0, updated_at = datetime('now') WHERE id = ?
-  `).run(run.id);
+    UPDATE runs SET status = 'success', finished_at = datetime('now'), exit_code = 0,
+      tokens_input = tokens_input + ?, tokens_output = tokens_output + ?, cost_usd = cost_usd + ?,
+      updated_at = datetime('now') WHERE id = ?
+  `).run(tokensIn, tokensOut, costUsd, run.id);
   await logEvent(run.id, 'success', 'Provider execution completed successfully');
 }
 
@@ -334,14 +339,55 @@ async function anthropicDispatch(run, agent, providerConfig, card, apiKey) {
 
   const data = await response.json();
   const content = data.content?.[0]?.text || '';
+  const tokensIn = data.usage?.input_tokens || 0;
+  const tokensOut = data.usage?.output_tokens || 0;
+  const costUsd = estimateCost(model, tokensIn, tokensOut);
 
-  await logEvent(run.id, 'api_response', 'Received response from Anthropic');
+  await logEvent(run.id, 'api_response', `Received response from Anthropic (${tokensIn} in / ${tokensOut} out tokens, $${costUsd.toFixed(6)})`);
   await logEvent(run.id, 'stdout', content);
 
   db.prepare(`
-    UPDATE runs SET status = 'success', finished_at = datetime('now'), exit_code = 0, updated_at = datetime('now') WHERE id = ?
-  `).run(run.id);
+    UPDATE runs SET status = 'success', finished_at = datetime('now'), exit_code = 0,
+      tokens_input = tokens_input + ?, tokens_output = tokens_output + ?, cost_usd = cost_usd + ?,
+      updated_at = datetime('now') WHERE id = ?
+  `).run(tokensIn, tokensOut, costUsd, run.id);
   await logEvent(run.id, 'success', 'Provider execution completed successfully');
+}
+
+/**
+ * Estimates cost in USD based on model and token counts.
+ * Prices are approximate (per million tokens) as of mid-2025.
+ */
+export function estimateCost(model, tokensIn, tokensOut) {
+  const m = (model || '').toLowerCase();
+
+  // OpenAI models
+  if (m.includes('gpt-5') || m.includes('gpt5')) return (tokensIn * 2.50 + tokensOut * 10.0) / 1_000_000;
+  if (m.includes('gpt-4o-mini')) return (tokensIn * 0.15 + tokensOut * 0.60) / 1_000_000;
+  if (m.includes('gpt-4o')) return (tokensIn * 2.50 + tokensOut * 10.0) / 1_000_000;
+  if (m.includes('gpt-4-turbo') || m.includes('gpt-4-1106') || m.includes('gpt-4-0125')) return (tokensIn * 10.0 + tokensOut * 30.0) / 1_000_000;
+  if (m.includes('gpt-4')) return (tokensIn * 30.0 + tokensOut * 60.0) / 1_000_000;
+  if (m.includes('gpt-3.5')) return (tokensIn * 0.50 + tokensOut * 1.50) / 1_000_000;
+  if (m.includes('o4-mini') || m.includes('o3-mini')) return (tokensIn * 1.10 + tokensOut * 4.40) / 1_000_000;
+  if (m.includes('o4') || m.includes('o3')) return (tokensIn * 10.0 + tokensOut * 40.0) / 1_000_000;
+
+  // Anthropic models
+  if (m.includes('claude-opus-4') || m.includes('claude-4-opus')) return (tokensIn * 15.0 + tokensOut * 75.0) / 1_000_000;
+  if (m.includes('claude-sonnet-4') || m.includes('claude-4-sonnet')) return (tokensIn * 3.0 + tokensOut * 15.0) / 1_000_000;
+  if (m.includes('claude-haiku-4') || m.includes('claude-4-haiku')) return (tokensIn * 0.25 + tokensOut * 1.25) / 1_000_000;
+  if (m.includes('claude-3-5-sonnet') || m.includes('claude-3.5-sonnet')) return (tokensIn * 3.0 + tokensOut * 15.0) / 1_000_000;
+  if (m.includes('claude-3-opus')) return (tokensIn * 15.0 + tokensOut * 75.0) / 1_000_000;
+  if (m.includes('claude-3-sonnet')) return (tokensIn * 3.0 + tokensOut * 15.0) / 1_000_000;
+  if (m.includes('claude-3-haiku') || m.includes('claude-haiku')) return (tokensIn * 0.25 + tokensOut * 1.25) / 1_000_000;
+  if (m.includes('claude')) return (tokensIn * 3.0 + tokensOut * 15.0) / 1_000_000;
+
+  // Google models
+  if (m.includes('gemini-3-pro') || m.includes('gemini-2.5-pro')) return (tokensIn * 1.25 + tokensOut * 10.0) / 1_000_000;
+  if (m.includes('gemini-3-flash') || m.includes('gemini-2.5-flash')) return (tokensIn * 0.075 + tokensOut * 0.30) / 1_000_000;
+  if (m.includes('gemini')) return (tokensIn * 0.15 + tokensOut * 0.60) / 1_000_000;
+
+  // Default: assume a mid-range cost
+  return (tokensIn * 1.0 + tokensOut * 3.0) / 1_000_000;
 }
 
 function buildMessages(agent, card) {

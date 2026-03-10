@@ -18,6 +18,8 @@ import executionRouter from './routes/execution.js';
 import settingsRouter from './routes/settings.js';
 import flowsRouter from './routes/flows.js';
 import chatRouter from './routes/chat.js';
+import skillsRouter from './routes/skills.js';
+import mcpRouter from './routes/mcp.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -51,6 +53,8 @@ app.use('/api/execute', executionRouter);
 app.use('/api/settings', settingsRouter);
 app.use('/api/flows', flowsRouter);
 app.use('/api/chat', chatRouter);
+app.use('/api/skills', skillsRouter);
+app.use('/api/mcp', mcpRouter);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

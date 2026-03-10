@@ -145,6 +145,8 @@ export default function BoardPage() {
     setDragOverColumnId(null);
     const card = dragCardRef.current;
     if (!card || card.column_id === columnId) return;
+    // Capture original column_id before clearing the ref and mutating state
+    const originalColumnId = card.column_id;
     dragCardRef.current = null;
 
     // Optimistic update
@@ -154,8 +156,8 @@ export default function BoardPage() {
       await api.put(`/cards/${card.id}`, { column_id: columnId });
     } catch (err) {
       console.error('Failed to move card:', err);
-      // Revert on failure
-      setCards(prev => prev.map(c => c.id === card.id ? { ...c, column_id: card.column_id } : c));
+      // Revert on failure using the captured original column_id
+      setCards(prev => prev.map(c => c.id === card.id ? { ...c, column_id: originalColumnId } : c));
     }
   }
 

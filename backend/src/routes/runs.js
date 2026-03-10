@@ -69,4 +69,82 @@ router.post('/:id/cancel', (req, res) => {
   }
 });
 
+// Cost and token usage stats
+router.get('/stats/costs', (req, res) => {
+  try {
+    const db = getDb();
+    const { workspace_id, agent_id, period } = req.query;
+
+    // Determine the date cutoff based on period (default: current month)
+    let since;
+    if (period === '7d') {
+      since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    } else if (period === '30d') {
+      since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    } else {
+      // Current calendar month
+      const now = new Date();
+      since = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    }
+
+    const conditions = ['r.created_at >= ?'];
+    const params = [since];
+
+    if (workspace_id) {
+      conditions.push('p.workspace_id = ?');
+      params.push(workspace_id);
+    }
+    if (agent_id) {
+      conditions.push('r.agent_id = ?');
+      params.push(agent_id);
+    }
+
+    const where = 'WHERE ' + conditions.join(' AND ');
+
+    const totals = db.prepare(`
+      SELECT
+        COUNT(*) as run_count,
+        SUM(r.tokens_input) as total_tokens_input,
+        SUM(r.tokens_output) as total_tokens_output,
+        SUM(r.cost_usd) as total_cost_usd
+      FROM runs r
+      LEFT JOIN projects p ON r.project_id = p.id
+      ${where}
+    `).get(...params);
+
+    const byAgent = db.prepare(`
+      SELECT
+        r.agent_id,
+        a.name as agent_name,
+        COUNT(*) as run_count,
+        SUM(r.tokens_input) as tokens_input,
+        SUM(r.tokens_output) as tokens_output,
+        SUM(r.cost_usd) as cost_usd,
+        a.monthly_budget_usd
+      FROM runs r
+      LEFT JOIN agents a ON r.agent_id = a.id
+      LEFT JOIN projects p ON r.project_id = p.id
+      ${where}
+      GROUP BY r.agent_id
+      ORDER BY cost_usd DESC
+    `).all(...params);
+
+    const byDay = db.prepare(`
+      SELECT
+        substr(r.created_at, 1, 10) as date,
+        SUM(r.cost_usd) as cost_usd,
+        SUM(r.tokens_input + r.tokens_output) as total_tokens
+      FROM runs r
+      LEFT JOIN projects p ON r.project_id = p.id
+      ${where}
+      GROUP BY date
+      ORDER BY date ASC
+    `).all(...params);
+
+    res.json({ since, totals, byAgent, byDay });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;
