@@ -46,9 +46,11 @@ sequenceDiagram
 | Algorithm | HS256 (HMAC-SHA256) |
 | Expiry | 30 days |
 | Header | `Authorization: Bearer <token>` |
-| Secret source | `FOUNDRY_JWT_SECRET` env var (see warning below) |
+| Secret source | `FOUNDRY_JWT_SECRET` env var (separate from `FOUNDRY_ADMIN_PASSWORD`) |
 
-> **⚠️ Security Warning**: If `AUTH_ENABLED` is `true` but `FOUNDRY_JWT_SECRET` is not set, the server falls back to the default secret `'foundry-dev-secret-change-in-prod'` and logs a `console.warn`. Always set `FOUNDRY_JWT_SECRET` to a strong random value in production.
+> **⚠️ Security Warning**: Two env vars control auth:
+> - `FOUNDRY_ADMIN_PASSWORD` — enables auth and sets the admin password. Required to activate auth.
+> - `FOUNDRY_JWT_SECRET` — secret used to sign tokens. If not set, falls back to `'foundry-dev-secret-change-in-prod'` and logs a `console.warn`. Always set this to a strong random value in production.
 
 ---
 

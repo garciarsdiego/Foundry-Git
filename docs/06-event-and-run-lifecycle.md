@@ -254,7 +254,7 @@ flowchart TD
     H -->|success| I[next step]
     H -->|failed| J[mark flow_run failed\nstop iteration]
 
-    F -->|parallel| K[createRun + dispatchRun fire-and-forget\nno await, errors swallowed]
+    F -->|parallel| K[createRun + dispatchRun fire-and-forget\nno await — stdout/stderr still logged to run_events\nerrors logged but do not stop the flow]
     K --> I
 
     F -->|condition| L[log condition step\nno execution]
@@ -270,7 +270,7 @@ flowchart TD
 | Type | Behaviour |
 |---|---|
 | `agent` | Blocking — the flow waits for the agent run to complete before continuing. A failure stops the flow. |
-| `parallel` | Fire-and-forget — the run is dispatched concurrently and the flow moves to the next step immediately. |
+| `parallel` | Fire-and-forget — the run is dispatched concurrently and the flow moves to the next step immediately. The run's `stdout`, `stderr`, and status events are still written to `run_events` and can be monitored via `GET /api/runs/:id/events`. A parallel step failure does **not** stop the flow. |
 | `condition` | Informational only — no agent run is created. Used as decision nodes in the visual editor. |
 
 ### Flow Run States

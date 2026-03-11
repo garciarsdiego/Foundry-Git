@@ -142,8 +142,10 @@ Agents have a persistent key-value store in `agent_memories`. Memory entries are
 |---|---|---|
 | `id` | TEXT (UUID) | Primary key |
 | `agent_id` | TEXT | FK → agents.id |
-| `key` | TEXT | Memory key |
-| `value` | TEXT | Memory value |
+| `workspace_id` | TEXT | FK → workspaces.id |
+| `memory_key` | TEXT | Memory key |
+| `content` | TEXT | Memory value |
+| `session_id` | TEXT | Optional session scope (nullable) |
 | `importance` | INTEGER | 1 (low) – 5 (critical) |
 | `created_at` | DATETIME | Auto-set |
 | `updated_at` | DATETIME | Auto-updated |
